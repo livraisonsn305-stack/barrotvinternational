@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'livraisonsn305@gmail.com';
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['admin', 'user'];
+
+      allow update: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin())
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['admin', 'user'];
+
+      allow delete: if false;
+    }
+
+    match /articles/{articleId} {
+      allow get, list: if resource == null || resource.data.status == 'published' || isAdmin();
+      allow read: if resource.data.status == 'published' || isAdmin();
+
+      allow create: if isAdmin()
+        && request.resource.data.title is string
+        && request.resource.data.slug is string
+        && request.resource.data.category is string
+        && request.resource.data.status in ['draft', 'published'];
+
+      allow update: if isAdmin()
+        && request.resource.data.status in ['draft', 'published'];
+
+      allow delete: if isAdmin();
+    }
+  }
+}
