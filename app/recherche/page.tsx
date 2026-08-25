@@ -1,55 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const allArticles = [
-  {
-    slug: "article/actualites-senegal",
-    title: "Sénégal : les grandes actualités à suivre aujourd'hui",
-    category: "Actualité Sénégal",
-  },
-  {
-    slug: "article/politique-senegal",
-    title: "Les dernières décisions politiques au Sénégal",
-    category: "Politique",
-  },
-  {
-    slug: "article/football-senegal",
-    title: "Les dernières nouvelles du football sénégalais",
-    category: "Sport",
-  },
-  {
-    slug: "politique",
-    title: "Politique du Sénégal",
-    category: "Politique",
-  },
-  {
-    slug: "societe",
-    title: "Société sénégalaise",
-    category: "Société",
-  },
-  {
-    slug: "sport",
-    title: "Sport et football",
-    category: "Sport",
-  },
-];
+import { fetchArticles, filterArticlesByQuery, type Article } from "@/lib/articles";
 
 export default function RecherchePage() {
   const [query, setQuery] = useState("");
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const results = useMemo(() => {
-    if (!query.trim()) return allArticles;
+  useEffect(() => {
+    let ignore = false;
 
-    const search = query.toLowerCase();
-    return allArticles.filter(
-      (article) =>
-        article.title.toLowerCase().includes(search) ||
-        article.category.toLowerCase().includes(search) ||
-        article.slug.toLowerCase().includes(search)
-    );
-  }, [query]);
+    async function loadArticles() {
+      setLoading(true);
+      try {
+        const nextArticles = await fetchArticles("published");
+        if (!ignore) {
+          setArticles(nextArticles);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadArticles();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const results = useMemo(() => filterArticlesByQuery(articles, query), [articles, query]);
 
   return (
     <main className="min-h-screen bg-white text-slate-900">

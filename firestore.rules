@@ -16,8 +16,9 @@ service cloud.firestore {
     }
 
     match /subscribers/{subscriberId} {
-      allow create: if request.resource.id == subscriberId
-        && request.resource.data.email == subscriberId
+      allow create: if request.auth == null
+        && request.resource.id == request.resource.data.email
+        && request.resource.data.email is string
         && isValidNewsletterEmail(request.resource.data.email)
         && request.resource.data.source == 'homepage-newsletter'
         && request.resource.data.createdAt is timestamp

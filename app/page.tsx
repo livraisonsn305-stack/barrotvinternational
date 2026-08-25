@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
-import { fetchArticles, type Article } from "@/lib/articles";
+import { SearchDialog } from "@/components/SearchDialog";
+import { fetchArticles, getArticleImage, type Article } from "@/lib/articles";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 
@@ -65,18 +66,27 @@ export default function Home() {
     type: "idle",
     message: "",
   });
+  const [searchOpen, setSearchOpen] = useState(false);
   const router = useRouter();
   const { user, isAdmin, logout } = useAuth();
   const isAdminVisible = Boolean(user && isAdmin);
   const [publishedArticles, setPublishedArticles] = useState<Article[]>([]);
+  const [loadingArticles, setLoadingArticles] = useState(true);
 
   useEffect(() => {
     let ignore = false;
 
     async function loadArticles() {
-      const nextArticles = await fetchArticles("published");
-      if (!ignore) {
-        setPublishedArticles(nextArticles);
+      setLoadingArticles(true);
+      try {
+        const nextArticles = await fetchArticles("published");
+        if (!ignore) {
+          setPublishedArticles(nextArticles);
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingArticles(false);
+        }
       }
     }
 
@@ -203,13 +213,14 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/recherche"
-              className="hidden rounded-full border px-3 py-2 sm:inline-flex"
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-[#d62828] hover:text-[#d62828]"
               aria-label="Rechercher"
             >
-              🔎
-            </Link>
+              🔎 <span className="hidden sm:inline">Rechercher</span>
+            </button>
 
             {isAdminVisible ? (
               <Link
@@ -326,16 +337,23 @@ export default function Home() {
 
       <section className="mx-auto max-w-7xl px-4 py-6">
         <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
-          {publishedArticles.length > 0 ? (
+          {loadingArticles ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
+              Chargement des articles…
+            </div>
+          ) : publishedArticles.length > 0 ? (
             <Link
               href={`/article/${publishedArticles[0].slug || publishedArticles[0].id}`}
               className="block overflow-hidden rounded-2xl bg-slate-900"
             >
               <article className="relative min-h-[430px] overflow-hidden rounded-2xl bg-slate-900">
                 <img
-                  src={publishedArticles[0].image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
+                  src={getArticleImage(publishedArticles[0].image)}
                   alt={publishedArticles[0].title}
                   className="absolute inset-0 h-full w-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.src = getArticleImage();
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
                 <div className="relative flex min-h-[430px] flex-col justify-end p-6 text-white sm:p-9">
@@ -364,13 +382,16 @@ export default function Home() {
           )}
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-            {publishedArticles.slice(1, 3).map((article) => (
+            {!loadingArticles && publishedArticles.slice(1, 3).map((article) => (
               <Link key={article.id} href={`/article/${article.slug || article.id}`} className="block">
                 <article className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
                   <img
-                    src={article.image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
+                    src={getArticleImage(article.image)}
                     alt={article.title}
                     className="h-40 w-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.src = getArticleImage();
+                    }}
                   />
                   <div className="p-5">
                     <div className="text-xs font-black uppercase tracking-wider text-[#d62828]">
@@ -387,6 +408,17 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <button
+        type="button"
+        onClick={() => setSearchOpen(true)}
+        className="fixed bottom-4 right-4 z-30 inline-flex items-center gap-2 rounded-full bg-[#d62828] px-4 py-3 text-sm font-bold text-white shadow-lg sm:hidden"
+        aria-label="Rechercher"
+      >
+        🔎 Rechercher
+      </button>
+
+      <SearchDialog articles={publishedArticles} isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
       <section className="mx-auto max-w-7xl border-y px-4 py-4">
         <div className="flex gap-7 overflow-x-auto whitespace-nowrap text-sm font-bold">
@@ -430,9 +462,12 @@ export default function Home() {
               >
                 <Link href={`/article/${article.slug || article.id}`} className="block">
                   <img
-                    src={article.image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
+                    src={getArticleImage(article.image)}
                     alt={article.title}
                     className="h-52 w-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.src = getArticleImage();
+                    }}
                   />
                   <div className="p-5">
                     <div className="text-xs font-black uppercase tracking-wider text-[#d62828]">

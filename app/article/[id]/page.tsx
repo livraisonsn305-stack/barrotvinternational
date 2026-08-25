@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ShareButtons } from "@/components/ShareButtons";
-import { fetchArticles } from "@/lib/articles";
+import { fetchArticles, getArticleImage } from "@/lib/articles";
 
 function formatArticleDate(value: unknown) {
   if (!value || typeof value !== "object" || !("seconds" in value)) {
@@ -150,9 +150,12 @@ export default async function ArticlePage({
 
         <div className="mt-8 overflow-hidden rounded-2xl">
           <img
-            src={article.image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
+            src={getArticleImage(article.image)}
             alt={article.title}
             className="h-auto w-full object-cover"
+            onError={(event) => {
+              event.currentTarget.src = getArticleImage();
+            }}
           />
         </div>
 
