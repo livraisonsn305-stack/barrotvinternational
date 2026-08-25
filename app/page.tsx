@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 
 import { useAuth } from "@/lib/auth-context";
+import { db } from "@/lib/firebase";
 
 const articles = [
   {
@@ -60,8 +63,72 @@ const tabs = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("POPULAIRE");
-  const { user, isAdmin } = useAuth();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [subscribeStatus, setSubscribeStatus] = useState<{ type: "idle" | "loading" | "success" | "error"; message: string }>({
+    type: "idle",
+    message: "",
+  });
+  const router = useRouter();
+  const { user, isAdmin, logout } = useAuth();
   const isAdminVisible = Boolean(user && isAdmin);
+
+  const handleSubscribe = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+      setSubscribeStatus({
+        type: "error",
+        message: "Veuillez saisir une adresse e-mail valide.",
+      });
+      return;
+    }
+
+    if (!db) {
+      setSubscribeStatus({
+        type: "error",
+        message: "La configuration Firebase est indisponible pour le moment.",
+      });
+      return;
+    }
+
+    try {
+      setSubscribeStatus({ type: "loading", message: "Enregistrement en cours..." });
+
+      const subscribersRef = collection(db, "subscribers");
+      const existingQuery = query(subscribersRef, where("email", "==", normalizedEmail));
+      const snapshot = await getDocs(existingQuery);
+
+      if (!snapshot.empty) {
+        setSubscribeStatus({
+          type: "error",
+          message: "Cette adresse est déjà inscrite à notre newsletter.",
+        });
+        return;
+      }
+
+      await addDoc(subscribersRef, {
+        email: normalizedEmail,
+        createdAt: serverTimestamp(),
+        source: "homepage-newsletter",
+      });
+
+      setEmail("");
+      setSubscribeStatus({
+        type: "success",
+        message: "Merci ! Vous êtes maintenant abonné à Barro TV International.",
+      });
+    } catch (error) {
+      console.error("Newsletter subscription error:", error);
+      setSubscribeStatus({
+        type: "error",
+        message: "Une erreur est survenue lors de l'inscription. Veuillez réessayer.",
+      });
+    }
+  };
 
   const visibleArticles = useMemo(() => {
     if (activeTab === "POPULAIRE") return articles;
@@ -109,7 +176,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Link
               href="/recherche"
-              className="rounded-full border px-3 py-2"
+              className="hidden rounded-full border px-3 py-2 sm:inline-flex"
               aria-label="Rechercher"
             >
               🔎
@@ -130,8 +197,69 @@ export default function Home() {
                 Se connecter
               </Link>
             )}
+
+            <button
+              type="button"
+              aria-label="Ouvrir le menu"
+              aria-expanded={isMenuOpen}
+              onClick={() => setIsMenuOpen((open) => !open)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-xl text-slate-800 shadow-sm md:hidden"
+            >
+              ☰
+            </button>
           </div>
         </div>
+
+        {isMenuOpen && (
+          <div className="border-t bg-white md:hidden">
+            <nav className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4 text-base font-semibold">
+              <Link href="/" onClick={() => setIsMenuOpen(false)} className="rounded-lg px-3 py-2 text-[#d62828]">
+                Accueil
+              </Link>
+              <Link href="/politique" onClick={() => setIsMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
+                Politique
+              </Link>
+              <Link href="/societe" onClick={() => setIsMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
+                Société
+              </Link>
+              <Link href="/economie" onClick={() => setIsMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
+                Économie
+              </Link>
+              <Link href="/faits-divers" onClick={() => setIsMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
+                Faits-divers
+              </Link>
+
+              {user ? (
+                <>
+                  {isAdminVisible ? (
+                    <Link href="/administrateur" onClick={() => setIsMenuOpen(false)} className="rounded-lg bg-[#111b35] px-3 py-3 font-bold text-white text-center">
+                      Mon compte
+                    </Link>
+                  ) : (
+                    <Link href="/connexion" onClick={() => setIsMenuOpen(false)} className="rounded-lg bg-[#111b35] px-3 py-3 font-bold text-white text-center">
+                      Mon compte
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await logout();
+                      setIsMenuOpen(false);
+                      router.push("/connexion");
+                    }}
+                    className="rounded-lg border border-slate-300 px-3 py-3 font-bold text-slate-800"
+                  >
+                    Déconnexion
+                  </button>
+                </>
+              ) : (
+                <Link href="/connexion" onClick={() => setIsMenuOpen(false)} className="rounded-lg bg-[#d62828] px-3 py-3 font-bold text-white text-center">
+                  Se connecter
+                </Link>
+              )}
+            </nav>
+          </div>
+        )}
       </header>
 
       <div className="border-b bg-white">
@@ -293,16 +421,39 @@ export default function Home() {
           <p className="mx-auto mt-3 max-w-xl text-slate-300">
             Recevez les principales informations de Barro TV International.
           </p>
-          <div className="mx-auto mt-6 flex max-w-lg flex-col gap-3 sm:flex-row">
+          <form onSubmit={handleSubscribe} className="mx-auto mt-6 flex max-w-lg flex-col gap-3 sm:flex-row">
             <input
               type="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (subscribeStatus.type !== "idle") {
+                  setSubscribeStatus({ type: "idle", message: "" });
+                }
+              }}
               placeholder="Votre adresse email"
               className="flex-1 rounded-lg px-4 py-3 text-black outline-none"
+              aria-label="Adresse e-mail"
+              disabled={subscribeStatus.type === "loading"}
             />
-            <button className="rounded-lg bg-[#d62828] px-6 py-3 font-bold">
-              S'abonner
+            <button
+              type="submit"
+              disabled={subscribeStatus.type === "loading"}
+              className="rounded-lg bg-[#d62828] px-6 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {subscribeStatus.type === "loading" ? "En cours..." : "S'abonner"}
             </button>
-          </div>
+          </form>
+
+          {subscribeStatus.type !== "idle" && (
+            <p
+              className={`mt-4 text-sm ${
+                subscribeStatus.type === "success" ? "text-green-400" : "text-red-300"
+              }`}
+            >
+              {subscribeStatus.message}
+            </p>
+          )}
         </div>
       </section>
 

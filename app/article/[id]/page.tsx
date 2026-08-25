@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { ShareButtons } from "@/components/ShareButtons";
+
 const articles: Record<
   string,
   {
@@ -174,21 +176,7 @@ export default async function ArticlePage({
           />
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <span className="mr-2 font-bold">Partager :</span>
-
-          <button className="rounded-full bg-[#111b35] px-4 py-2 text-sm font-bold text-white">
-            Facebook
-          </button>
-
-          <button className="rounded-full bg-black px-4 py-2 text-sm font-bold text-white">
-            X
-          </button>
-
-          <button className="rounded-full bg-green-600 px-4 py-2 text-sm font-bold text-white">
-            WhatsApp
-          </button>
-        </div>
+        <ShareButtons articleTitle={article.title} />
 
         <div className="mt-10 max-w-4xl">
           {article.content.map((paragraph, index) => (
