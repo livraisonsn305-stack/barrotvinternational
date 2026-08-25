@@ -12,11 +12,12 @@ service cloud.firestore {
     function isValidNewsletterEmail(email) {
       return email is string
         && email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
-        && email == email.toLowerCase();
+        && email == email.lower();
     }
 
     match /subscribers/{subscriberId} {
-      allow create: if request.resource.data.email == subscriberId
+      allow create: if request.resource.id == subscriberId
+        && request.resource.data.email == subscriberId
         && isValidNewsletterEmail(request.resource.data.email)
         && request.resource.data.source == 'homepage-newsletter'
         && request.resource.data.createdAt is timestamp
@@ -44,20 +45,10 @@ service cloud.firestore {
     }
 
     match /articles/{articleId} {
-      allow get: if resource == null || resource.data.status == 'published' || isAdmin();
-      allow list: if resource == null || resource.data.status == 'published' || isAdmin();
-      allow read: if resource.data.status == 'published' || isAdmin();
+      allow get: if (resource.data.status == 'published' && !isSignedIn()) || isAdmin();
+      allow list: if !isSignedIn() || isAdmin();
 
-      allow create: if isAdmin()
-        && request.resource.data.title is string
-        && request.resource.data.slug is string
-        && request.resource.data.category is string
-        && request.resource.data.status in ['draft', 'published'];
-
-      allow update: if isAdmin()
-        && request.resource.data.status in ['draft', 'published'];
-
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
   }
 }

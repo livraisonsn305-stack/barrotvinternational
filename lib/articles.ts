@@ -5,7 +5,6 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -84,13 +83,7 @@ export function listenToArticles(
 
   const base = collection(db, ARTICLES_COLLECTION);
   const q =
-    status === "all"
-      ? query(base, orderBy("createdAt", "desc"))
-      : query(
-          base,
-          where("status", "==", status),
-          orderBy("createdAt", "desc")
-        );
+    status === "all" ? query(base) : query(base, where("status", "==", status));
 
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map((docSnapshot) => ({
@@ -108,13 +101,7 @@ export async function fetchArticles(status: ArticleStatus | "all" = "published")
 
   const base = collection(db, ARTICLES_COLLECTION);
   const q =
-    status === "all"
-      ? query(base, orderBy("createdAt", "desc"))
-      : query(
-          base,
-          where("status", "==", status),
-          orderBy("createdAt", "desc")
-        );
+    status === "all" ? query(base) : query(base, where("status", "==", status));
 
   const snapshot = await getDocs(q);
 
