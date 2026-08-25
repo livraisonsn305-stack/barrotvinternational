@@ -9,6 +9,26 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email == 'livraisonsn305@gmail.com';
     }
 
+    function isValidNewsletterEmail(email) {
+      return email is string
+        && email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && email == email.toLowerCase();
+    }
+
+    match /subscribers/{subscriberId} {
+      allow get: if resource == null
+        || (resource.id == resource.data.email
+            && isValidNewsletterEmail(resource.data.email));
+
+      allow create: if request.resource.data.email == subscriberId
+        && isValidNewsletterEmail(request.resource.data.email)
+        && request.resource.data.source == 'homepage-newsletter'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'source']);
+
+      allow update, delete, list: if false;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
 

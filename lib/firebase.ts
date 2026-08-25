@@ -1,5 +1,5 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, setPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -33,6 +33,10 @@ export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
 export const storage = app ? getStorage(app) : null;
 export const googleProvider = app ? new GoogleAuthProvider() : null;
+
+if (auth) {
+  void setPersistence(auth, browserLocalPersistence);
+}
 
 if (googleProvider) {
   googleProvider.setCustomParameters({

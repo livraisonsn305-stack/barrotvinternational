@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
@@ -98,11 +98,10 @@ export default function Home() {
     try {
       setSubscribeStatus({ type: "loading", message: "Enregistrement en cours..." });
 
-      const subscribersRef = collection(db, "subscribers");
-      const existingQuery = query(subscribersRef, where("email", "==", normalizedEmail));
-      const snapshot = await getDocs(existingQuery);
+      const subscriberRef = doc(db, "subscribers", normalizedEmail);
+      const snapshot = await getDoc(subscriberRef);
 
-      if (!snapshot.empty) {
+      if (snapshot.exists()) {
         setSubscribeStatus({
           type: "error",
           message: "Cette adresse est déjà inscrite à notre newsletter.",
@@ -110,7 +109,7 @@ export default function Home() {
         return;
       }
 
-      await addDoc(subscribersRef, {
+      await setDoc(subscriberRef, {
         email: normalizedEmail,
         createdAt: serverTimestamp(),
         source: "homepage-newsletter",
@@ -125,7 +124,7 @@ export default function Home() {
       console.error("Newsletter subscription error:", error);
       setSubscribeStatus({
         type: "error",
-        message: "Une erreur est survenue lors de l'inscription. Veuillez réessayer.",
+        message: "La création de l'inscription a été refusée par Firebase. Vérifiez votre adresse e-mail et réessayez.",
       });
     }
   };
@@ -153,14 +152,24 @@ export default function Home() {
 
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <Link href="/" className="block">
-            <div className="text-2xl font-black tracking-tight">
-              BARRO <span className="text-[#d62828]">TV</span>
-            </div>
-            <div className="text-[10px] font-bold tracking-[0.35em] text-slate-600">
-              INTERNATIONAL
-            </div>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="block md:hidden">
+              <img
+                src="/logo.png"
+                alt="Barro TV International"
+                className="h-10 w-auto object-contain"
+              />
+            </Link>
+
+            <Link href="/" className="hidden md:block">
+              <div className="text-2xl font-black tracking-tight">
+                BARRO <span className="text-[#d62828]">TV</span>
+              </div>
+              <div className="text-[10px] font-bold tracking-[0.35em] text-slate-600">
+                INTERNATIONAL
+              </div>
+            </Link>
+          </div>
 
           <nav className="hidden items-center gap-7 font-semibold md:flex">
             <Link href="/" className="text-[#d62828]">
