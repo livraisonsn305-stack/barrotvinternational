@@ -16,17 +16,13 @@ service cloud.firestore {
     }
 
     match /subscribers/{subscriberId} {
-      allow get: if resource == null
-        || (resource.id == resource.data.email
-            && isValidNewsletterEmail(resource.data.email));
-
       allow create: if request.resource.data.email == subscriberId
         && isValidNewsletterEmail(request.resource.data.email)
         && request.resource.data.source == 'homepage-newsletter'
         && request.resource.data.createdAt is timestamp
         && request.resource.data.keys().hasOnly(['email', 'createdAt', 'source']);
 
-      allow update, delete, list: if false;
+      allow get, list, update, delete: if false;
     }
 
     match /users/{userId} {
@@ -48,7 +44,8 @@ service cloud.firestore {
     }
 
     match /articles/{articleId} {
-      allow get, list: if resource == null || resource.data.status == 'published' || isAdmin();
+      allow get: if resource == null || resource.data.status == 'published' || isAdmin();
+      allow list: if resource == null || resource.data.status == 'published' || isAdmin();
       allow read: if resource.data.status == 'published' || isAdmin();
 
       allow create: if isAdmin()

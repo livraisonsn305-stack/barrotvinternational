@@ -1,6 +1,43 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+
+import { fetchArticles, type Article } from "@/lib/articles";
+
+const normalizeCategory = (value?: string) => (value ?? "").toUpperCase().replace(/\s+/g, " ").trim();
 
 export default function PolitiquePage() {
+  const [articles, setArticles] = useState<Article[]>([]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadArticles() {
+      const published = await fetchArticles("published");
+      if (!ignore) {
+        setArticles(published);
+      }
+    }
+
+    void loadArticles();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const politiqueArticles = useMemo(
+    () =>
+      [...articles]
+        .filter((article) => normalizeCategory(article.category) === "POLITIQUE")
+        .sort((a, b) => {
+          const left = Number(a.createdAt?.seconds ?? 0);
+          const right = Number(b.createdAt?.seconds ?? 0);
+          return right - left;
+        }),
+    [articles]
+  );
+
   return (
     <main className="min-h-screen bg-white text-slate-900">
       <div className="bg-[#111b35] text-white">
@@ -32,10 +69,24 @@ export default function PolitiquePage() {
       <section className="mx-auto max-w-5xl px-4 py-12">
         <h1 className="text-4xl font-black text-[#111b35]">Politique</h1>
         <div className="mt-6 grid gap-5">
-          <Link href="/article/politique-senegal" className="rounded-2xl border p-5 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-wider text-[#d62828]">Politique</div>
-            <h2 className="mt-2 text-2xl font-bold">Les dernières décisions politiques au Sénégal</h2>
-          </Link>
+          {politiqueArticles.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-slate-600">
+              Aucun article politique publié pour le moment.
+            </div>
+          ) : (
+            politiqueArticles.map((article) => (
+              <Link
+                key={article.id}
+                href={`/article/${article.slug || article.id}`}
+                className="rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <div className="text-xs font-black uppercase tracking-wider text-[#d62828]">
+                  {article.category}
+                </div>
+                <h2 className="mt-2 text-2xl font-bold">{article.title}</h2>
+              </Link>
+            ))
+          )}
         </div>
       </section>
     </main>

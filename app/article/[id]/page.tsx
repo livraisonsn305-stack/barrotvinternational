@@ -1,65 +1,26 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { ShareButtons } from "@/components/ShareButtons";
+import { fetchArticles } from "@/lib/articles";
 
-const articles: Record<
-  string,
-  {
-    category: string;
-    title: string;
-    description: string;
-    image: string;
-    date: string;
-    author: string;
-    content: string[];
+function formatArticleDate(value: unknown) {
+  if (!value || typeof value !== "object" || !("seconds" in value)) {
+    return "Aujourd'hui";
   }
-> = {
-  "actualites-senegal": {
-    category: "ACTUALITÉ SÉNÉGAL",
-    title: "Sénégal : les grandes actualités à suivre aujourd'hui",
-    description:
-      "Retrouvez les informations essentielles, les réactions et les dernières nouvelles de la rédaction de Barro TV International.",
-    image:
-      "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85",
-    date: "24 août 2026 • 18:00",
-    author: "La rédaction de Barro TV International",
-    content: [
-      "Barro TV International vous propose un point sur les principales actualités à suivre au Sénégal et à l'international.",
-      "Cette page sera prochainement alimentée avec les articles publiés par la rédaction. Chaque actualité pourra présenter les faits essentiels, les réactions et les informations utiles aux lecteurs.",
-      "Notre objectif est de proposer une information claire, rapide et accessible, avec une couverture de la politique, de la société, de l'économie, du sport, de la culture et de l'actualité internationale.",
-    ],
-  },
 
-  "politique-senegal": {
-    category: "POLITIQUE",
-    title: "Les dernières décisions politiques au Sénégal",
-    description:
-      "Les principales informations politiques et les décisions qui font l'actualité.",
-    image:
-      "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?auto=format&fit=crop&w=900&q=80",
-    date: "24 août 2026 • 17:40",
-    author: "Barro TV International",
-    content: [
-      "Retrouvez dans cet article les principales informations politiques du Sénégal.",
-      "La rédaction de Barro TV International suivra les développements et présentera les informations importantes au fur et à mesure.",
-    ],
-  },
+  const seconds = Number((value as { seconds?: number }).seconds ?? 0);
+  if (!seconds) return "Aujourd'hui";
 
-  "football-senegal": {
-    category: "SPORT",
-    title: "Les dernières nouvelles du football sénégalais",
-    description:
-      "Toute l'actualité du football sénégalais, les résultats et les informations importantes.",
-    image:
-      "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=900&q=80",
-    date: "24 août 2026 • 17:25",
-    author: "Barro TV International",
-    content: [
-      "Le football occupe une place importante dans l'actualité sportive sénégalaise.",
-      "Barro TV International vous proposera les résultats, les réactions, les transferts et les principales informations concernant les Lions et les clubs sénégalais.",
-    ],
-  },
-};
+  const date = new Date(seconds * 1000);
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
 
 export async function generateMetadata({
   params,
@@ -67,7 +28,15 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const article = articles[id] ?? articles["actualites-senegal"];
+  const articles = await fetchArticles("published");
+  const article = articles.find((item) => item.slug === id || item.id === id) ?? articles[0];
+
+  if (!article) {
+    return {
+      title: "Article",
+      description: "Article de Barro TV International",
+    };
+  }
 
   return {
     title: article.title,
@@ -84,7 +53,18 @@ export default async function ArticlePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const article = articles[id] ?? articles["actualites-senegal"];
+  const articles = await fetchArticles("published");
+  const article = articles.find((item) => item.slug === id || item.id === id) ?? articles[0];
+
+  if (!article) {
+    notFound();
+  }
+
+  const paragraphs = article.content
+    ? article.content.split(/\n+/).map((paragraph) => paragraph.trim()).filter(Boolean)
+    : [];
+
+  const shareUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://barotvinternational.com"}/article/${article.slug || article.id}`;
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -164,23 +144,23 @@ export default async function ArticlePage({
         </p>
 
         <div className="mt-6 flex flex-col gap-2 border-y py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:gap-6">
-          <span>✍️ {article.author}</span>
-          <span>🕐 {article.date}</span>
+          <span>✍️ {article.author || "Barro TV International"}</span>
+          <span>🕐 {formatArticleDate(article.createdAt)}</span>
         </div>
 
         <div className="mt-8 overflow-hidden rounded-2xl">
           <img
-            src={article.image}
+            src={article.image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
             alt={article.title}
             className="h-auto w-full object-cover"
           />
         </div>
 
-        <ShareButtons articleTitle={article.title} />
+        <ShareButtons articleTitle={article.title} articleUrl={shareUrl} />
 
         <div className="mt-10 max-w-4xl">
-          {article.content.map((paragraph, index) => (
-            <p key={index} className="mb-6 text-lg leading-8 text-slate-800">
+          {paragraphs.map((paragraph, index) => (
+            <p key={`${article.id}-${index}`} className="mb-6 text-lg leading-8 text-slate-800">
               {paragraph}
             </p>
           ))}

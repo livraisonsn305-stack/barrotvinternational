@@ -2,41 +2,37 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
+import { fetchArticles, type Article } from "@/lib/articles";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 
-const articles = [
-  {
-    href: "/article/politique-senegal",
-    category: "POLITIQUE",
-    tag: "politique",
-    title: "Les dernières décisions politiques au Sénégal",
-    time: "Il y a 20 minutes",
-    image:
-      "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?auto=format&fit=crop&w=900&q=80",
-  },
-  {
-    href: "/article/football-senegal",
-    category: "SPORT",
-    tag: "sport",
-    title: "Les dernières nouvelles du football sénégalais",
-    time: "Il y a 35 minutes",
-    image:
-      "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=900&q=80",
-  },
-  {
-    href: "/article/actualites-senegal",
-    category: "ACTUALITÉ SÉNÉGAL",
-    tag: "actualites-senegal",
-    title: "Les informations importantes de la société sénégalaise",
-    time: "Il y a 1 heure",
-    image:
-      "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=900&q=80",
-  },
-];
+const normalizeCategory = (value?: string) => (value ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+
+function formatArticleTime(value: unknown) {
+  if (!value || typeof value !== "object" || !("seconds" in value)) {
+    return "À l'instant";
+  }
+
+  const seconds = Number((value as { seconds?: number }).seconds ?? 0);
+  if (!seconds) return "À l'instant";
+
+  const diffMinutes = Math.max(1, Math.round((Date.now() - seconds * 1000) / 60000));
+
+  if (diffMinutes < 60) {
+    return `Il y a ${diffMinutes} minute${diffMinutes > 1 ? "s" : ""}`;
+  }
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `Il y a ${diffHours} heure${diffHours > 1 ? "s" : ""}`;
+  }
+
+  const diffDays = Math.round(diffHours / 24);
+  return `Il y a ${diffDays} jour${diffDays > 1 ? "s" : ""}`;
+}
 
 const categories = [
   { label: "Politique", href: "/politique" },
@@ -72,6 +68,23 @@ export default function Home() {
   const router = useRouter();
   const { user, isAdmin, logout } = useAuth();
   const isAdminVisible = Boolean(user && isAdmin);
+  const [publishedArticles, setPublishedArticles] = useState<Article[]>([]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadArticles() {
+      const nextArticles = await fetchArticles("published");
+      if (!ignore) {
+        setPublishedArticles(nextArticles);
+      }
+    }
+
+    void loadArticles();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleSubscribe = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -130,16 +143,23 @@ export default function Home() {
   };
 
   const visibleArticles = useMemo(() => {
-    if (activeTab === "POPULAIRE") return articles;
+    const sortedArticles = [...publishedArticles].sort((a, b) => {
+      const left = Number(a.createdAt?.seconds ?? 0);
+      const right = Number(b.createdAt?.seconds ?? 0);
+      return right - left;
+    });
+
+    if (activeTab === "POPULAIRE") return sortedArticles;
     if (activeTab === "ACTUALITÉS SÉNÉGAL")
-      return articles.filter((article) => article.tag === "actualites-senegal");
+      return sortedArticles.filter((article) => normalizeCategory(article.category) === "ACTUALITÉ SÉNÉGAL");
     if (activeTab === "POLITIQUE")
-      return articles.filter((article) => article.tag === "politique");
+      return sortedArticles.filter((article) => normalizeCategory(article.category) === "POLITIQUE");
     if (activeTab === "SPORT")
-      return articles.filter((article) => article.tag === "sport");
-    if (activeTab === "AFRIQUE") return articles.slice(0, 1);
-    return articles.slice(0, 1);
-  }, [activeTab]);
+      return sortedArticles.filter((article) => normalizeCategory(article.category) === "SPORT");
+    if (activeTab === "AFRIQUE")
+      return sortedArticles.filter((article) => normalizeCategory(article.category) === "AFRIQUE");
+    return sortedArticles.slice(0, 1);
+  }, [activeTab, publishedArticles]);
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -306,44 +326,49 @@ export default function Home() {
 
       <section className="mx-auto max-w-7xl px-4 py-6">
         <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
-          <Link
-            href="/article/actualites-senegal"
-            className="block overflow-hidden rounded-2xl bg-slate-900"
-          >
-            <article className="relative min-h-[430px] overflow-hidden rounded-2xl bg-slate-900">
-              <img
-                src="https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"
-                alt="Actualités internationales"
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
-              <div className="relative flex min-h-[430px] flex-col justify-end p-6 text-white sm:p-9">
-                <span className="mb-4 w-fit rounded-md bg-[#d62828] px-3 py-2 text-xs font-bold uppercase">
-                  À la une
-                </span>
-                <p className="mb-2 text-sm font-bold uppercase tracking-wider text-red-300">
-                  Actualité Sénégal
-                </p>
-                <h1 className="max-w-3xl text-3xl font-black leading-tight sm:text-5xl">
-                  Sénégal : les grandes actualités à suivre aujourd'hui
-                </h1>
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base">
-                  Retrouvez les informations essentielles, les réactions et les
-                  dernières nouvelles de la rédaction de Barro TV International.
-                </p>
-                <div className="mt-5 text-sm text-slate-300">
-                  Publié aujourd'hui • Barro TV International
+          {publishedArticles.length > 0 ? (
+            <Link
+              href={`/article/${publishedArticles[0].slug || publishedArticles[0].id}`}
+              className="block overflow-hidden rounded-2xl bg-slate-900"
+            >
+              <article className="relative min-h-[430px] overflow-hidden rounded-2xl bg-slate-900">
+                <img
+                  src={publishedArticles[0].image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
+                  alt={publishedArticles[0].title}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
+                <div className="relative flex min-h-[430px] flex-col justify-end p-6 text-white sm:p-9">
+                  <span className="mb-4 w-fit rounded-md bg-[#d62828] px-3 py-2 text-xs font-bold uppercase">
+                    À la une
+                  </span>
+                  <p className="mb-2 text-sm font-bold uppercase tracking-wider text-red-300">
+                    {publishedArticles[0].category}
+                  </p>
+                  <h1 className="max-w-3xl text-3xl font-black leading-tight sm:text-5xl">
+                    {publishedArticles[0].title}
+                  </h1>
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base">
+                    {publishedArticles[0].description}
+                  </p>
+                  <div className="mt-5 text-sm text-slate-300">
+                    {formatArticleTime(publishedArticles[0].createdAt)} • Barro TV International
+                  </div>
                 </div>
-              </div>
-            </article>
-          </Link>
+              </article>
+            </Link>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
+              Aucun article publié pour le moment.
+            </div>
+          )}
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-            {articles.slice(0, 2).map((article) => (
-              <Link key={article.title} href={article.href} className="block">
+            {publishedArticles.slice(1, 3).map((article) => (
+              <Link key={article.id} href={`/article/${article.slug || article.id}`} className="block">
                 <article className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
                   <img
-                    src={article.image}
+                    src={article.image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
                     alt={article.title}
                     className="h-40 w-full object-cover"
                   />
@@ -354,7 +379,7 @@ export default function Home() {
                     <h2 className="mt-2 text-xl font-bold leading-tight">
                       {article.title}
                     </h2>
-                    <p className="mt-3 text-sm text-slate-500">{article.time}</p>
+                    <p className="mt-3 text-sm text-slate-500">{formatArticleTime(article.createdAt)}</p>
                   </div>
                 </article>
               </Link>
@@ -393,32 +418,38 @@ export default function Home() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {visibleArticles.map((article) => (
-            <article
-              key={article.title}
-              className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
-            >
-              <Link href={article.href} className="block">
-                <img
-                  src={article.image}
-                  alt={article.title}
-                  className="h-52 w-full object-cover"
-                />
-                <div className="p-5">
-                  <div className="text-xs font-black uppercase tracking-wider text-[#d62828]">
-                    {article.category}
+          {visibleArticles.length === 0 ? (
+            <div className="col-span-full rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
+              Aucun article disponible pour cette catégorie.
+            </div>
+          ) : (
+            visibleArticles.map((article) => (
+              <article
+                key={article.id}
+                className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+              >
+                <Link href={`/article/${article.slug || article.id}`} className="block">
+                  <img
+                    src={article.image || "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85"}
+                    alt={article.title}
+                    className="h-52 w-full object-cover"
+                  />
+                  <div className="p-5">
+                    <div className="text-xs font-black uppercase tracking-wider text-[#d62828]">
+                      {article.category}
+                    </div>
+                    <h3 className="mt-2 text-xl font-bold leading-tight">
+                      {article.title}
+                    </h3>
+                    <p className="mt-3 text-sm text-slate-500">{formatArticleTime(article.createdAt)}</p>
+                    <span className="mt-5 inline-block font-bold text-[#111b35]">
+                      Lire l'article →
+                    </span>
                   </div>
-                  <h3 className="mt-2 text-xl font-bold leading-tight">
-                    {article.title}
-                  </h3>
-                  <p className="mt-3 text-sm text-slate-500">{article.time}</p>
-                  <span className="mt-5 inline-block font-bold text-[#111b35]">
-                    Lire l'article →
-                  </span>
-                </div>
-              </Link>
-            </article>
-          ))}
+                </Link>
+              </article>
+            ))
+          )}
         </div>
       </section>
 
