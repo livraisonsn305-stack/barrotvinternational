@@ -26,7 +26,7 @@ export default function SportPage() {
       <section className="mx-auto max-w-5xl px-4 py-12">
         <h1 className="text-4xl font-black text-[#111b35]">Sport</h1>
         <div className="mt-6 rounded-2xl border p-5 shadow-sm">
-          <Link href="/article/football-senegal" className="text-2xl font-bold text-[#111b35]">
+          <Link href="/article" className="text-2xl font-bold text-[#111b35]">
             Les dernières nouvelles du football sénégalais
           </Link>
         </div>

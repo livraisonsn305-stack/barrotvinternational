@@ -116,9 +116,18 @@ export default function AdministrateurPage() {
     });
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, title?: string) {
+    const confirmed = window.confirm(
+      `Voulez-vous vraiment supprimer l'article "${title ?? "cet article"}" ?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     await deleteArticle(id);
     setArticles((current) => current.filter((article) => article.id !== id));
+    setDrafts((current) => current.filter((article) => article.id !== id));
   }
 
   if (!isReady) {
@@ -320,7 +329,7 @@ export default function AdministrateurPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(article.id)}
+                    onClick={() => handleDelete(article.id, article.title)}
                     className="rounded-lg bg-[#111b35] px-4 py-2 font-bold text-white"
                   >
                     Supprimer

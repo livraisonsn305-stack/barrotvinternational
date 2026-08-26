@@ -3,11 +3,11 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
   type DocumentData,
@@ -122,8 +122,12 @@ export async function saveArticle(article: Partial<Article>, id?: string) {
 
   if (id) {
     const ref = doc(db, ARTICLES_COLLECTION, id);
-    await updateDoc(ref, payload);
-    return id;
+    const snapshot = await getDoc(ref);
+
+    if (snapshot.exists()) {
+      await updateDoc(ref, payload);
+      return id;
+    }
   }
 
   const ref = await addDoc(collection(db, ARTICLES_COLLECTION), {

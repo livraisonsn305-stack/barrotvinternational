@@ -152,24 +152,26 @@ export default function Home() {
     }
   };
 
-  const visibleArticles = useMemo(() => {
-    const sortedArticles = [...publishedArticles].sort((a, b) => {
-      const left = Number(a.createdAt?.seconds ?? 0);
-      const right = Number(b.createdAt?.seconds ?? 0);
-      return right - left;
-    });
+  const sortedPublishedArticles = useMemo(
+    () => [...publishedArticles].sort((a, b) => Number(b.createdAt?.seconds ?? 0) - Number(a.createdAt?.seconds ?? 0)),
+    [publishedArticles]
+  );
 
-    if (activeTab === "POPULAIRE") return sortedArticles;
+  const featuredArticle = sortedPublishedArticles[0];
+  const featuredArticleHref = featuredArticle ? `/article/${featuredArticle.slug || featuredArticle.id}` : "/article";
+
+  const visibleArticles = useMemo(() => {
+    if (activeTab === "POPULAIRE") return sortedPublishedArticles;
     if (activeTab === "ACTUALITÉS SÉNÉGAL")
-      return sortedArticles.filter((article) => normalizeCategory(article.category) === "ACTUALITÉ SÉNÉGAL");
+      return sortedPublishedArticles.filter((article) => normalizeCategory(article.category) === "ACTUALITÉ SÉNÉGAL");
     if (activeTab === "POLITIQUE")
-      return sortedArticles.filter((article) => normalizeCategory(article.category) === "POLITIQUE");
+      return sortedPublishedArticles.filter((article) => normalizeCategory(article.category) === "POLITIQUE");
     if (activeTab === "SPORT")
-      return sortedArticles.filter((article) => normalizeCategory(article.category) === "SPORT");
+      return sortedPublishedArticles.filter((article) => normalizeCategory(article.category) === "SPORT");
     if (activeTab === "AFRIQUE")
-      return sortedArticles.filter((article) => normalizeCategory(article.category) === "AFRIQUE");
-    return sortedArticles.slice(0, 1);
-  }, [activeTab, publishedArticles]);
+      return sortedPublishedArticles.filter((article) => normalizeCategory(article.category) === "AFRIQUE");
+    return sortedPublishedArticles.slice(0, 1);
+  }, [activeTab, sortedPublishedArticles]);
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -319,7 +321,7 @@ export default function Home() {
       </div>
 
       <section className="mx-auto max-w-7xl px-4 pt-6">
-        <Link href="/article/actualites-senegal" className="block">
+        <Link href={featuredArticleHref} className="block">
           <div className="flex items-center gap-3 rounded-xl bg-[#111b35] px-5 py-4 text-white shadow">
             <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" />
             <div>
@@ -341,15 +343,15 @@ export default function Home() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
               Chargement des articles…
             </div>
-          ) : publishedArticles.length > 0 ? (
+          ) : featuredArticle ? (
             <Link
-              href={`/article/${publishedArticles[0].slug || publishedArticles[0].id}`}
+              href={`/article/${featuredArticle.slug || featuredArticle.id}`}
               className="block overflow-hidden rounded-2xl bg-slate-900"
             >
               <article className="relative min-h-[430px] overflow-hidden rounded-2xl bg-slate-900">
                 <img
-                  src={getArticleImage(publishedArticles[0].image)}
-                  alt={publishedArticles[0].title}
+                  src={getArticleImage(featuredArticle.image)}
+                  alt={featuredArticle.title}
                   className="absolute inset-0 h-full w-full object-cover"
                   onError={(event) => {
                     event.currentTarget.src = getArticleImage();
@@ -361,16 +363,16 @@ export default function Home() {
                     À la une
                   </span>
                   <p className="mb-2 text-sm font-bold uppercase tracking-wider text-red-300">
-                    {publishedArticles[0].category}
+                    {featuredArticle.category}
                   </p>
                   <h1 className="max-w-3xl text-3xl font-black leading-tight sm:text-5xl">
-                    {publishedArticles[0].title}
+                    {featuredArticle.title}
                   </h1>
                   <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base">
-                    {publishedArticles[0].description}
+                    {featuredArticle.description}
                   </p>
                   <div className="mt-5 text-sm text-slate-300">
-                    {formatArticleTime(publishedArticles[0].createdAt)} • Barro TV International
+                    {formatArticleTime(featuredArticle.createdAt)} • Barro TV International
                   </div>
                 </div>
               </article>

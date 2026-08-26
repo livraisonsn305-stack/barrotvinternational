@@ -95,7 +95,7 @@ export default function RecherchePage() {
             results.map((article) => (
               <Link
                 key={article.slug}
-                href={`/${article.slug}`}
+                href={`/article/${article.slug || article.id}`}
                 className="block rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
               >
                 <div className="text-xs font-black uppercase tracking-wider text-[#d62828]">
