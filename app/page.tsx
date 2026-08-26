@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { SearchDialog } from "@/components/SearchDialog";
 import { fetchArticles, getArticleImage, type Article } from "@/lib/articles";
@@ -122,15 +122,6 @@ export default function Home() {
       setSubscribeStatus({ type: "loading", message: "Enregistrement en cours..." });
 
       const subscriberRef = doc(db, "subscribers", normalizedEmail);
-      const snapshot = await getDoc(subscriberRef);
-
-      if (snapshot.exists()) {
-        setSubscribeStatus({
-          type: "error",
-          message: "Cette adresse est déjà inscrite à notre newsletter.",
-        });
-        return;
-      }
 
       await setDoc(subscriberRef, {
         email: normalizedEmail,
@@ -144,6 +135,14 @@ export default function Home() {
         message: "Merci ! Vous êtes maintenant abonné à Barro TV International.",
       });
     } catch (error) {
+      if ((error as { code?: string }).code === "permission-denied") {
+        setSubscribeStatus({
+          type: "error",
+          message: "Cette adresse est déjà inscrite à notre newsletter.",
+        });
+        return;
+      }
+
       console.error("Newsletter subscription error:", error);
       setSubscribeStatus({
         type: "error",

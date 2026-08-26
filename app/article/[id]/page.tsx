@@ -61,7 +61,7 @@ export default function ArticlePage() {
     ? article.content.split(/\n+/).map((paragraph) => paragraph.trim()).filter(Boolean)
     : [];
 
-  const shareUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://barotvinternational.com"}/article/${article.slug || article.id}`;
+  const shareUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.barrotvinternational.com"}/article/${article.slug || article.id}`;
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
