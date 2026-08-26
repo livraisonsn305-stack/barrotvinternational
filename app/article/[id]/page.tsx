@@ -1,8 +1,10 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 
 import { ShareButtons } from "@/components/ShareButtons";
-import { fetchArticles, getArticleImage } from "@/lib/articles";
+import { fetchArticles, getArticleImage, type Article } from "@/lib/articles";
 
 function formatArticleDate(value: unknown) {
   if (!value || typeof value !== "object" || !("seconds" in value)) {
@@ -22,42 +24,37 @@ function formatArticleDate(value: unknown) {
   }).format(date);
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}): Promise<Metadata> {
-  const { id } = await params;
-  const articles = await fetchArticles("published");
-  const article = articles.find((item) => item.slug === id || item.id === id) ?? articles[0];
+export default function ArticlePage() {
+  const { id } = useParams<{ id: string }>();
+  const [article, setArticle] = useState<Article | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!article) {
-    return {
-      title: "Article",
-      description: "Article de Barro TV International",
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadArticle() {
+      setLoading(true);
+      const articles = await fetchArticles("published");
+      const nextArticle = articles.find((item) => item.slug === id || item.id === id) ?? null;
+
+      if (!ignore) {
+        setArticle(nextArticle);
+        setLoading(false);
+      }
+    }
+
+    void loadArticle();
+    return () => {
+      ignore = true;
     };
+  }, [id]);
+
+  if (loading) {
+    return <main className="min-h-screen bg-white p-8 text-slate-600">Chargement de l'article…</main>;
   }
 
-  return {
-    title: article.title,
-    description: article.description,
-    alternates: {
-      canonical: `/article/${id}`,
-    },
-  };
-}
-
-export default async function ArticlePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const articles = await fetchArticles("published");
-  const article = articles.find((item) => item.slug === id || item.id === id) ?? articles[0];
-
   if (!article) {
-    notFound();
+    return <main className="min-h-screen bg-white p-8 text-slate-600">Article introuvable.</main>;
   }
 
   const paragraphs = article.content
@@ -153,9 +150,6 @@ export default async function ArticlePage({
             src={getArticleImage(article.image)}
             alt={article.title}
             className="h-auto w-full object-cover"
-            onError={(event) => {
-              event.currentTarget.src = getArticleImage();
-            }}
           />
         </div>
 

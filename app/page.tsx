@@ -567,7 +567,7 @@ export default function Home() {
               <Link href="/contact" className="block hover:text-white">Contact</Link>
               <Link href="/a-propos" className="block hover:text-white">À propos</Link>
               <Link href="/mentions-legales" className="block hover:text-white">Mentions légales</Link>
-              <Link href="/politique-confidentialite" className="block hover:text-white">Politique de confidentialité</Link>
+              <Link href="/politique-de-confidentialite" className="block hover:text-white">Politique de confidentialité</Link>
               <p>Dakar, Usine Bene Tally</p>
               <p>📞 78 388 91 58</p>
               <p>🌐 barotvinternational.com</p>
