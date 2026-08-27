@@ -8,7 +8,7 @@ import {
   getDocs,
   orderBy,
   query,
-  serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 
 import { ShareButtons } from "@/components/ShareButtons";
@@ -178,7 +178,7 @@ export default function ArticlePage() {
     const name = commentName.trim();
     const text = commentText.trim();
 
-    if (!name || name.length > 80 || !text || text.length > 2000 || !article || !db) {
+    if (!name || name.length > 80 || !text || text.length > 1000 || !article || !db) {
       setCommentsError("Veuillez renseigner un nom et un commentaire valides.");
       return;
     }
@@ -186,15 +186,19 @@ export default function ArticlePage() {
     try {
       setCommentSubmitting(true);
       setCommentsError("");
-      await addDoc(collection(db, "articles", article.id, "comments"), {
+      const createdAt = Timestamp.now();
+      const commentRef = await addDoc(collection(db, "articles", article.id, "comments"), {
         name,
         text,
-        createdAt: serverTimestamp(),
+        createdAt,
       });
 
       setCommentName("");
       setCommentText("");
-      setComments(await fetchArticleComments(article.id));
+      setComments((currentComments) => [
+        { id: commentRef.id, name, text, createdAt },
+        ...currentComments,
+      ]);
     } catch (error) {
       console.error("Comment creation error:", error);
       setCommentsError("Impossible de publier le commentaire pour le moment.");
@@ -326,7 +330,7 @@ export default function ArticlePage() {
             Commentaires
           </h2>
 
-          <form onSubmit={handleCommentSubmit} className="mt-6 space-y-4">
+          <form noValidate onSubmit={handleCommentSubmit} className="mt-6 space-y-4">
             <div>
               <label htmlFor="comment-name" className="mb-2 block text-sm font-bold text-slate-700">
                 Votre nom
@@ -350,7 +354,7 @@ export default function ArticlePage() {
                 id="comment-text"
                 value={commentText}
                 onChange={(event) => setCommentText(event.target.value)}
-                maxLength={2000}
+                maxLength={1000}
                 rows={5}
                 required
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-[#d62828]"
@@ -366,7 +370,11 @@ export default function ArticlePage() {
             </button>
           </form>
 
-          {commentsError && <p className="mt-4 text-sm text-red-600">{commentsError}</p>}
+          {commentsError && (
+            <p role="alert" className="mt-4 text-sm text-red-600">
+              {commentsError}
+            </p>
+          )}
 
           <div className="mt-8 space-y-4">
             {commentsLoading ? (
