@@ -29,6 +29,7 @@ export type Article = {
   authorEmail?: string;
   status: ArticleStatus;
   published: boolean;
+  views?: number;
   createdAt?: any;
   updatedAt?: any;
 };

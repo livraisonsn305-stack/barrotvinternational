@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   addDoc,
@@ -76,6 +76,8 @@ export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
+  const [views, setViews] = useState(0);
+  const countedArticleId = useRef("");
   const [comments, setComments] = useState<ArticleComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsError, setCommentsError] = useState("");
@@ -93,6 +95,7 @@ export default function ArticlePage() {
 
       if (!ignore) {
         setArticle(nextArticle);
+        setViews(Number(nextArticle?.views ?? 0));
         setLoading(false);
       }
     }
@@ -102,6 +105,40 @@ export default function ArticlePage() {
       ignore = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!article?.id || countedArticleId.current === article.id) return;
+
+    const articleId = article.id;
+    countedArticleId.current = articleId;
+    let ignore = false;
+
+    async function recordView() {
+      try {
+        const response = await fetch("/api/article-views", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ articleId }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`View request failed with status ${response.status}`);
+        }
+
+        const result = (await response.json()) as { views?: number };
+        if (!ignore && typeof result.views === "number") {
+          setViews(result.views);
+        }
+      } catch (error) {
+        console.error("Article view request error:", error);
+      }
+    }
+
+    void recordView();
+    return () => {
+      ignore = true;
+    };
+  }, [article?.id]);
 
   useEffect(() => {
     if (!article?.id) return;
@@ -260,6 +297,7 @@ export default function ArticlePage() {
         <div className="mt-6 flex flex-col gap-2 border-y py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:gap-6">
           <span>✍️ {article.author || "Barro TV International"}</span>
           <span>🕐 {formatArticleDate(article.createdAt)}</span>
+          <span>👁️ {views} {views === 1 ? "vue" : "vues"}</span>
         </div>
 
         <div className="mt-8 overflow-hidden rounded-2xl">
