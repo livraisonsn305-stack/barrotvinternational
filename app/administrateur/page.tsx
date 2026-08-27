@@ -8,6 +8,15 @@ import { ADMIN_EMAIL } from "@/lib/admin-config";
 import { useAuth } from "@/lib/auth-context";
 import { deleteArticle, fetchArticles, saveArticle, type Article } from "@/lib/articles";
 
+function cleanSlug(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export default function AdministrateurPage() {
   const router = useRouter();
   const { user, logout, isAdmin } = useAuth();
@@ -67,7 +76,7 @@ export default function AdministrateurPage() {
     }
 
     try {
-      const slug = form.slug || form.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
+      const slug = form.slug ? cleanSlug(form.slug) : form.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
       const payload = {
         title: form.title,
         slug,
