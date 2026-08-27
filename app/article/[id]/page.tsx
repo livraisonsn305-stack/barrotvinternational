@@ -2,9 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+} from "firebase/firestore";
 
 import { ShareButtons } from "@/components/ShareButtons";
 import { fetchArticles, getArticleImage, type Article } from "@/lib/articles";
+import { db } from "@/lib/firebase";
+
+type ArticleComment = {
+  id: string;
+  name: string;
+  text: string;
+  createdAt?: unknown;
+};
 
 function formatArticleDate(value: unknown) {
   if (!value || typeof value !== "object" || !("seconds" in value)) {
@@ -24,10 +40,48 @@ function formatArticleDate(value: unknown) {
   }).format(date);
 }
 
+function formatCommentDate(value: unknown) {
+  if (!value || typeof value !== "object" || !("seconds" in value)) {
+    return "Date indisponible";
+  }
+
+  const seconds = Number((value as { seconds?: number }).seconds ?? 0);
+  if (!seconds) return "Date indisponible";
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(seconds * 1000));
+}
+
+async function fetchArticleComments(articleId: string) {
+  if (!db) return [] as ArticleComment[];
+
+  const commentsQuery = query(
+    collection(db, "articles", articleId, "comments"),
+    orderBy("createdAt", "desc")
+  );
+  const snapshot = await getDocs(commentsQuery);
+
+  return snapshot.docs.map((commentSnapshot) => ({
+    id: commentSnapshot.id,
+    ...(commentSnapshot.data() as Omit<ArticleComment, "id">),
+  }));
+}
+
 export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
+  const [comments, setComments] = useState<ArticleComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentsError, setCommentsError] = useState("");
+  const [commentName, setCommentName] = useState("");
+  const [commentText, setCommentText] = useState("");
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -48,6 +102,69 @@ export default function ArticlePage() {
       ignore = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!article?.id) return;
+
+    const articleId = article.id;
+    let ignore = false;
+
+    async function loadComments() {
+      try {
+        setCommentsLoading(true);
+        setCommentsError("");
+        const nextComments = await fetchArticleComments(articleId);
+        if (!ignore) {
+          setComments(nextComments);
+        }
+      } catch (error) {
+        console.error("Comments loading error:", error);
+        if (!ignore) {
+          setCommentsError("Impossible de charger les commentaires pour le moment.");
+        }
+      } finally {
+        if (!ignore) {
+          setCommentsLoading(false);
+        }
+      }
+    }
+
+    void loadComments();
+    return () => {
+      ignore = true;
+    };
+  }, [article?.id]);
+
+  async function handleCommentSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = commentName.trim();
+    const text = commentText.trim();
+
+    if (!name || name.length > 80 || !text || text.length > 2000 || !article || !db) {
+      setCommentsError("Veuillez renseigner un nom et un commentaire valides.");
+      return;
+    }
+
+    try {
+      setCommentSubmitting(true);
+      setCommentsError("");
+      await addDoc(collection(db, "articles", article.id, "comments"), {
+        name,
+        text,
+        createdAt: serverTimestamp(),
+      });
+
+      setCommentName("");
+      setCommentText("");
+      setComments(await fetchArticleComments(article.id));
+    } catch (error) {
+      console.error("Comment creation error:", error);
+      setCommentsError("Impossible de publier le commentaire pour le moment.");
+    } finally {
+      setCommentSubmitting(false);
+    }
+  }
 
   if (loading) {
     return <main className="min-h-screen bg-white p-8 text-slate-600">Chargement de l'article…</main>;
@@ -162,6 +279,72 @@ export default function ArticlePage() {
             </p>
           ))}
         </div>
+
+        <section className="mt-12 max-w-4xl border-t pt-8" aria-labelledby="comments-title">
+          <h2 id="comments-title" className="text-2xl font-black text-[#111b35]">
+            Commentaires
+          </h2>
+
+          <form onSubmit={handleCommentSubmit} className="mt-6 space-y-4">
+            <div>
+              <label htmlFor="comment-name" className="mb-2 block text-sm font-bold text-slate-700">
+                Votre nom
+              </label>
+              <input
+                id="comment-name"
+                type="text"
+                value={commentName}
+                onChange={(event) => setCommentName(event.target.value)}
+                maxLength={80}
+                required
+                className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-[#d62828]"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="comment-text" className="mb-2 block text-sm font-bold text-slate-700">
+                Votre commentaire
+              </label>
+              <textarea
+                id="comment-text"
+                value={commentText}
+                onChange={(event) => setCommentText(event.target.value)}
+                maxLength={2000}
+                rows={5}
+                required
+                className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-[#d62828]"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={commentSubmitting}
+              className="rounded-lg bg-[#d62828] px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {commentSubmitting ? "Publication..." : "Publier le commentaire"}
+            </button>
+          </form>
+
+          {commentsError && <p className="mt-4 text-sm text-red-600">{commentsError}</p>}
+
+          <div className="mt-8 space-y-4">
+            {commentsLoading ? (
+              <p className="text-slate-600">Chargement des commentaires...</p>
+            ) : comments.length === 0 ? (
+              <p className="text-slate-600">Aucun commentaire pour le moment.</p>
+            ) : (
+              comments.map((comment) => (
+                <article key={comment.id} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <h3 className="font-bold text-[#111b35]">{comment.name}</h3>
+                    <time className="text-sm text-slate-500">{formatCommentDate(comment.createdAt)}</time>
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap text-slate-700">{comment.text}</p>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
 
         <div className="mt-10 rounded-2xl bg-slate-100 p-6">
           <h2 className="text-xl font-black text-[#111b35]">
