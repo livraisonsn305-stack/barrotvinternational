@@ -200,6 +200,13 @@ export default function ArticlePage() {
         ...currentComments,
       ]);
     } catch (error) {
+      const commentError = error as { code?: unknown; message?: unknown; name?: unknown };
+      console.error("COMMENT_CREATE_ERROR", {
+        code: commentError.code,
+        message: commentError.message,
+        name: commentError.name,
+        error,
+      });
       console.error("Comment creation error:", error);
       setCommentsError("Impossible de publier le commentaire pour le moment.");
     } finally {
