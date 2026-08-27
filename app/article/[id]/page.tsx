@@ -305,6 +305,9 @@ export default function ArticlePage() {
             src={getArticleImage(article.image)}
             alt={article.title}
             className="h-auto w-full object-cover"
+            onError={(event) => {
+              event.currentTarget.src = getArticleImage();
+            }}
           />
         </div>
 
