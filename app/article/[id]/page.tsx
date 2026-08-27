@@ -6,8 +6,6 @@ import {
   addDoc,
   collection,
   getDocs,
-  orderBy,
-  query,
   Timestamp,
 } from "firebase/firestore";
 
@@ -60,16 +58,18 @@ function formatCommentDate(value: unknown) {
 async function fetchArticleComments(articleId: string) {
   if (!db) return [] as ArticleComment[];
 
-  const commentsQuery = query(
-    collection(db, "articles", articleId, "comments"),
-    orderBy("createdAt", "desc")
-  );
-  const snapshot = await getDocs(commentsQuery);
+  const snapshot = await getDocs(collection(db, "articles", articleId, "comments"));
 
-  return snapshot.docs.map((commentSnapshot) => ({
-    id: commentSnapshot.id,
-    ...(commentSnapshot.data() as Omit<ArticleComment, "id">),
-  }));
+  return snapshot.docs
+    .map((commentSnapshot) => ({
+      id: commentSnapshot.id,
+      ...(commentSnapshot.data() as Omit<ArticleComment, "id">),
+    }))
+    .sort((firstComment, secondComment) => {
+      const firstMillis = firstComment.createdAt instanceof Timestamp ? firstComment.createdAt.toMillis() : 0;
+      const secondMillis = secondComment.createdAt instanceof Timestamp ? secondComment.createdAt.toMillis() : 0;
+      return secondMillis - firstMillis;
+    });
 }
 
 export default function ArticlePage() {
