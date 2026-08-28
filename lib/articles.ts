@@ -35,7 +35,7 @@ export type Article = {
 };
 
 export const FALLBACK_ARTICLE_IMAGE =
-  "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1600&q=85";
+  "/logo.png";
 
 export function normalizeSearchValue(value: string | undefined) {
   return (value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -46,6 +46,8 @@ export function getArticleImage(image?: string) {
 
   const normalized = image.trim();
   if (!normalized) return FALLBACK_ARTICLE_IMAGE;
+
+  if (normalized.startsWith("/")) return normalized;
 
   try {
     const parsed = new URL(normalized);
