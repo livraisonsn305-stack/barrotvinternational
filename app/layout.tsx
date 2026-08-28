@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   },
   description:
     "Barro TV International, votre média d'information au Sénégal et à l'international.",
-  metadataBase: new URL("https://www.barotvinternational.com"),
+  metadataBase: new URL("https://www.barrotvinternational.com"),
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
