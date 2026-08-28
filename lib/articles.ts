@@ -162,7 +162,9 @@ export function listenToArticles(
 
   const base = collection(db, ARTICLES_COLLECTION);
   const q =
-    status === "all" ? query(base) : query(base, where("status", "==", status));
+    status === "all"
+      ? query(base)
+      : query(base, where("status", "==", status), where("published", "==", true));
 
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map((docSnapshot) => ({
@@ -176,18 +178,31 @@ export function listenToArticles(
 }
 
 export async function fetchArticles(status: ArticleStatus | "all" = "published") {
-  if (!db) return [] as Article[];
+  if (!db) {
+    const error = new Error("Firebase Firestore is not configured.");
+    console.error("ARTICLES_READ_ERROR", error);
+    throw error;
+  }
 
-  const base = collection(db, ARTICLES_COLLECTION);
-  const q =
-    status === "all" ? query(base) : query(base, where("status", "==", status));
+  try {
+    const base = collection(db, ARTICLES_COLLECTION);
+    const snapshot = await getDocs(
+      status === "all"
+        ? query(base)
+        : query(base, where("status", "==", status), where("published", "==", true))
+    );
 
-  const snapshot = await getDocs(q);
-
-  return snapshot.docs.map((docSnapshot) => ({
-    id: docSnapshot.id,
-    ...(docSnapshot.data() as DocumentData),
-    createdAt: docSnapshot.data().createdAt,
-    updatedAt: docSnapshot.data().updatedAt,
-  })) as Article[];
+    return snapshot.docs.map((docSnapshot) => {
+      const data = docSnapshot.data();
+      return {
+        id: docSnapshot.id,
+        ...(data as DocumentData),
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      } as Article;
+    });
+  } catch (error) {
+    console.error("ARTICLES_READ_ERROR", error);
+    throw error;
+  }
 }
