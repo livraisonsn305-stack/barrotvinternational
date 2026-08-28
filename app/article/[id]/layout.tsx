@@ -40,9 +40,27 @@ function getPublicImage(image: string | undefined) {
   if (!image || typeof image !== "string") return FALLBACK_IMAGE;
 
   try {
-    const resolved = new URL(image.trim(), SITE_URL);
-    const isVercelHost = resolved.hostname === "vercel.app" || resolved.hostname.endsWith(".vercel.app");
-    return resolved.protocol === "https:" && !isVercelHost ? resolved.toString() : FALLBACK_IMAGE;
+    const normalized = image.trim();
+    if (!normalized) return FALLBACK_IMAGE;
+
+    const resolved = new URL(normalized, SITE_URL);
+    const hostname = resolved.hostname.toLowerCase();
+    const pathname = resolved.pathname.toLowerCase();
+    const isImagePath = /\.(?:avif|gif|jpe?g|png|svg|webp)$/.test(pathname);
+    const isVercelHost = hostname === "vercel.app" || hostname.endsWith(".vercel.app");
+    const isUnsplashHost = hostname === "unsplash.com" || hostname.endsWith(".unsplash.com");
+    const isLocalPath = normalized.startsWith("/");
+
+    if (
+      resolved.protocol === "https:" &&
+      !isVercelHost &&
+      !isUnsplashHost &&
+      (isImagePath || isLocalPath)
+    ) {
+      return resolved.toString();
+    }
+
+    return FALLBACK_IMAGE;
   } catch {
     return FALLBACK_IMAGE;
   }
