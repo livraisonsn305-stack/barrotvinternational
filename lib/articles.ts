@@ -108,6 +108,28 @@ export function filterArticlesByQuery(articles: Article[], query: string) {
   });
 }
 
+export function normalizeCategoryKey(value?: string) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .trim();
+}
+
+export function matchesCategoryKey(value: string | undefined, expected: string | string[]) {
+  const normalizedCategory = normalizeCategoryKey(value);
+  const expectedValues = (Array.isArray(expected) ? expected : [expected]).map((item) => normalizeCategoryKey(item));
+
+  return expectedValues.some((item) => {
+    if (!item || !normalizedCategory) {
+      return false;
+    }
+
+    return normalizedCategory === item || normalizedCategory.includes(item) || item.includes(normalizedCategory);
+  });
+}
+
 export const ARTICLES_COLLECTION = "articles";
 
 export function getArticlesCollection() {
@@ -203,6 +225,61 @@ export async function fetchArticles(status: ArticleStatus | "all" = "published")
     });
   } catch (error) {
     console.error("ARTICLES_READ_ERROR", error);
+    throw error;
+  }
+}
+
+export async function fetchPublishedArticle(identifier: string) {
+  if (!db) {
+    const error = new Error("Firebase Firestore is not configured.");
+    console.error("ARTICLE_READ_ERROR", error);
+    throw error;
+  }
+
+  const normalizedIdentifier = identifier.trim();
+  if (!normalizedIdentifier) return null;
+
+  try {
+    try {
+      const directSnapshot = await getDoc(doc(db, ARTICLES_COLLECTION, normalizedIdentifier));
+      if (directSnapshot.exists()) {
+        const data = directSnapshot.data();
+        if (data.status === "published" && data.published === true) {
+          return {
+            id: directSnapshot.id,
+            ...(data as DocumentData),
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+          } as Article;
+        }
+
+        return null;
+      }
+    } catch (directReadError) {
+      console.warn("ARTICLE_DIRECT_READ_FALLBACK", directReadError);
+    }
+
+    const slugSnapshot = await getDocs(
+      query(
+        collection(db, ARTICLES_COLLECTION),
+        where("slug", "==", normalizedIdentifier),
+        where("status", "==", "published"),
+        where("published", "==", true)
+      )
+    );
+
+    const slugDocument = slugSnapshot.docs[0];
+    if (!slugDocument) return null;
+
+    const data = slugDocument.data();
+    return {
+      id: slugDocument.id,
+      ...(data as DocumentData),
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    } as Article;
+  } catch (error) {
+    console.error("ARTICLE_READ_ERROR", error);
     throw error;
   }
 }
