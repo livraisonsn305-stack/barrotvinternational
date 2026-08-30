@@ -112,6 +112,7 @@ export function normalizeCategoryKey(value?: string) {
   return (value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, "ET")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
     .trim();
@@ -119,14 +120,29 @@ export function normalizeCategoryKey(value?: string) {
 
 export function matchesCategoryKey(value: string | undefined, expected: string | string[]) {
   const normalizedCategory = normalizeCategoryKey(value);
-  const expectedValues = (Array.isArray(expected) ? expected : [expected]).map((item) => normalizeCategoryKey(item));
+  if (!normalizedCategory) {
+    return false;
+  }
+
+  const expectedValues = (Array.isArray(expected) ? expected : [expected])
+    .map((item) => normalizeCategoryKey(item))
+    .filter(Boolean);
+
+  if (expectedValues.length === 0) {
+    return false;
+  }
 
   return expectedValues.some((item) => {
-    if (!item || !normalizedCategory) {
-      return false;
+    if (normalizedCategory === item) {
+      return true;
     }
 
-    return normalizedCategory === item || normalizedCategory.includes(item) || item.includes(normalizedCategory);
+    const aliases = new Set([item, `${item}S`, `${item}E`, `${item}ES`]);
+    if (aliases.has(normalizedCategory)) {
+      return true;
+    }
+
+    return normalizedCategory.includes(item) || item.includes(normalizedCategory);
   });
 }
 

@@ -45,12 +45,17 @@ export default function CategoryPage({ title, categoryKeys, emptyMessage }: Cate
     };
   }, [title]);
 
+  const requestedCategoryKeys = useMemo(
+    () => (Array.isArray(categoryKeys) ? categoryKeys : [categoryKeys]),
+    [categoryKeys]
+  );
+
   const categoryArticles = useMemo(
     () =>
       [...articles]
-        .filter((article) => matchesCategoryKey(article.category, categoryKeys))
+        .filter((article) => matchesCategoryKey(article.category, requestedCategoryKeys))
         .sort((a, b) => Number(b.createdAt?.seconds ?? 0) - Number(a.createdAt?.seconds ?? 0)),
-    [articles, categoryKeys]
+    [articles, requestedCategoryKeys]
   );
 
   return (
