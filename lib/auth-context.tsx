@@ -16,6 +16,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updateProfile as updateAuthProfile,
   type User,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -30,6 +31,7 @@ const AuthContext = createContext<{
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  saveProfile: (profile: { displayName: string; firstName: string; lastName: string; photoURL: string }) => Promise<void>;
   logout: () => Promise<void>;
   isAdmin: boolean;
 } | null>(null);
@@ -126,6 +128,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(auth, email);
   }, []);
 
+  const saveProfile = useCallback(
+    async ({ displayName, firstName, lastName, photoURL }: { displayName: string; firstName: string; lastName: string; photoURL: string }) => {
+      if (!auth || !db || !firebaseEnabled || !auth.currentUser) {
+        throw new Error("La configuration Firebase n'est pas disponible.");
+      }
+
+      const currentUser = auth.currentUser;
+      await updateAuthProfile(currentUser, { displayName, photoURL: photoURL || null });
+      await setDoc(doc(db, "users", currentUser.uid), {
+        uid: currentUser.uid,
+        email: currentUser.email || "",
+        displayName,
+        firstName,
+        lastName,
+        photoURL,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      setUser({ ...currentUser });
+    },
+    []
+  );
+
   const logout = useCallback(async () => {
     if (!auth || !firebaseEnabled) {
       return;
@@ -137,8 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = Boolean(user && user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase());
 
   const value = useMemo(
-    () => ({ user, loading, signUp, signIn, signInWithGoogle, resetPassword, logout, isAdmin }),
-    [user, loading, signUp, signIn, signInWithGoogle, resetPassword, logout, isAdmin]
+    () => ({ user, loading, signUp, signIn, signInWithGoogle, resetPassword, saveProfile, logout, isAdmin }),
+    [user, loading, signUp, signIn, signInWithGoogle, resetPassword, saveProfile, logout, isAdmin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,8 +10,9 @@ import {
 } from "firebase/firestore";
 
 import { ShareButtons } from "@/components/ShareButtons";
-import { fetchArticles, getArticleImage, type Article } from "@/lib/articles";
+import { fetchPublishedArticle, getArticleImage, type Article } from "@/lib/articles";
 import { db } from "@/lib/firebase";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 type ArticleComment = {
   id: string;
@@ -38,6 +39,19 @@ function formatArticleDate(value: unknown) {
   }).format(date);
 }
 
+function getTimestampMillis(value: unknown) {
+  if (!value) return null;
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    const timestamp = value as { toDate?: () => Date };
+    if (typeof timestamp.toDate === "function") return timestamp.toDate().getTime();
+  }
+  if (typeof value === "object" && value !== null && "seconds" in value) {
+    const seconds = Number((value as { seconds?: number }).seconds);
+    return Number.isFinite(seconds) ? seconds * 1000 : null;
+  }
+  return null;
+}
+
 function formatCommentDate(value: unknown) {
   if (!value || typeof value !== "object" || !("seconds" in value)) {
     return "Date indisponible";
@@ -53,6 +67,38 @@ function formatCommentDate(value: unknown) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(seconds * 1000));
+}
+
+function toIsoDate(value: unknown) {
+  if (!value) return undefined;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    const timestamp = value as { toDate?: () => Date };
+    if (typeof timestamp.toDate === "function") return timestamp.toDate().toISOString();
+  }
+  if (typeof value === "object" && value !== null && "seconds" in value) {
+    const seconds = Number((value as { seconds?: number }).seconds);
+    if (Number.isFinite(seconds)) return new Date(seconds * 1000).toISOString();
+  }
+  return undefined;
+}
+
+function getCategoryPath(category: string) {
+  const normalized = category.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const paths: Record<string, string> = {
+    AFRIQUE: "/afrique",
+    CULTURE: "/culture",
+    ECONOMIE: "/economie",
+    FAITSDIVERS: "/faits-divers",
+    INTERNATIONAL: "/international",
+    JUSTICE: "/justice",
+    PERSONNES: "/personnes",
+    POLITIQUE: "/politique",
+    SOCIETE: "/societe",
+    SPORT: "/sport",
+    TECHNOLOGIE: "/technologie",
+  };
+  return paths[normalized];
 }
 
 async function fetchArticleComments(articleId: string) {
@@ -76,6 +122,7 @@ export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
+  const [articleError, setArticleError] = useState("");
   const [views, setViews] = useState(0);
   const countedArticleId = useRef("");
   const [comments, setComments] = useState<ArticleComment[]>([]);
@@ -89,14 +136,28 @@ export default function ArticlePage() {
     let ignore = false;
 
     async function loadArticle() {
-      setLoading(true);
-      const articles = await fetchArticles("published");
-      const nextArticle = articles.find((item) => item.slug === id || item.id === id) ?? null;
+      try {
+        setLoading(true);
+        setArticleError("");
 
-      if (!ignore) {
-        setArticle(nextArticle);
-        setViews(Number(nextArticle?.views ?? 0));
-        setLoading(false);
+        if (!id) {
+          if (!ignore) setArticle(null);
+          return;
+        }
+
+        const nextArticle = await fetchPublishedArticle(id);
+
+        if (!ignore) {
+          setArticle(nextArticle);
+          setViews(Number(nextArticle?.views ?? 0));
+        }
+      } catch (loadError) {
+        console.error("ARTICLE_READ_ERROR", loadError);
+        if (!ignore) {
+          setArticleError("Impossible de charger cet article. Consultez la console pour le détail technique.");
+        }
+      } finally {
+        if (!ignore) setLoading(false);
       }
     }
 
@@ -218,6 +279,10 @@ export default function ArticlePage() {
     return <main className="min-h-screen bg-white p-8 text-slate-600">Chargement de l'article…</main>;
   }
 
+  if (articleError) {
+    return <main className="min-h-screen bg-white p-8 text-red-700">{articleError}</main>;
+  }
+
   if (!article) {
     return <main className="min-h-screen bg-white p-8 text-slate-600">Article introuvable.</main>;
   }
@@ -227,9 +292,50 @@ export default function ArticlePage() {
     : [];
 
   const shareUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.barrotvinternational.com"}/article/${article.slug || article.id}`;
+  const articleUrl = `${"https://www.barrotvinternational.com"}/article/${encodeURIComponent(article.slug || article.id)}`;
+  const datePublished = toIsoDate(article.createdAt);
+  const dateModified = toIsoDate(article.updatedAt) || datePublished;
+  const hasDistinctUpdate = Boolean(
+    article.updatedAt &&
+    getTimestampMillis(article.updatedAt) !== null &&
+    getTimestampMillis(article.updatedAt) !== getTimestampMillis(article.createdAt)
+  );
+  const categoryPath = getCategoryPath(article.category);
+  const articleStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: article.title,
+    ...(article.description?.trim() ? { description: article.description.trim() } : {}),
+    image: [getArticleImage(article.image)],
+    ...(datePublished ? { datePublished } : {}),
+    ...(dateModified ? { dateModified } : {}),
+    ...(article.author?.trim() ? { author: { "@type": "Person", name: article.author.trim() } } : {}),
+    publisher: {
+      "@type": ["Organization", "NewsMediaOrganization"],
+      name: "Barro TV International",
+      url: "https://www.barrotvinternational.com",
+      logo: { "@type": "ImageObject", url: "https://www.barrotvinternational.com/logo.png" },
+    },
+    mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
+    ...(article.category?.trim() ? { articleSection: article.category.trim() } : {}),
+  };
+  const breadcrumbItems = [
+    { "@type": "ListItem", position: 1, name: "Accueil", item: "https://www.barrotvinternational.com/" },
+    ...(categoryPath ? [{ "@type": "ListItem", position: 2, name: article.category, item: `https://www.barrotvinternational.com${categoryPath}` }] : []),
+    { "@type": "ListItem", position: categoryPath ? 3 : 2, name: article.title, item: articleUrl },
+  ];
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonLd([
+            articleStructuredData,
+            { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: breadcrumbItems },
+          ]),
+        }}
+      />
       <div className="bg-[#111b35] text-white">
         <div className="mx-auto flex max-w-7xl justify-between px-4 py-2 text-sm">
           <span>Dakar, Sénégal</span>
@@ -308,6 +414,7 @@ export default function ArticlePage() {
         <div className="mt-6 flex flex-col gap-2 border-y py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:gap-6">
           <span>✍️ {article.author || "Barro TV International"}</span>
           <span>🕐 {formatArticleDate(article.createdAt)}</span>
+          {hasDistinctUpdate ? <span>↻ Mis à jour le {formatArticleDate(article.updatedAt)}</span> : null}
           <span>👁️ {views} {views === 1 ? "vue" : "vues"}</span>
         </div>
 
@@ -321,6 +428,19 @@ export default function ArticlePage() {
             }}
           />
         </div>
+
+        {article.videoUrl?.trim() ? (
+          <div className="mt-8 overflow-hidden rounded-2xl bg-slate-950">
+            <video
+              className="aspect-video h-auto w-full"
+              controls
+              preload="metadata"
+              src={article.videoUrl.trim()}
+            >
+              Votre navigateur ne prend pas en charge la lecture vidéo.
+            </video>
+          </div>
+        ) : null}
 
         <ShareButtons articleTitle={article.title} articleUrl={shareUrl} />
 

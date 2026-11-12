@@ -8,15 +8,17 @@ import {
   query,
   serverTimestamp,
   updateDoc,
+  where,
   type DocumentData,
 } from "firebase/firestore";
 
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
 export type ContactMessageStatus = "unread" | "read";
 
 export type ContactMessage = {
   id: string;
+  uid?: string;
   name: string;
   email: string;
   phone: string;
@@ -35,12 +37,15 @@ export async function saveContactMessage(payload: {
   email: string;
   phone: string;
   message: string;
+  uid?: string;
 }) {
   if (!db) {
     return null;
   }
 
-  const ref = await addDoc(collection(db, CONTACT_MESSAGES_COLLECTION), {
+  await auth?.authStateReady();
+  const authenticatedUid = auth?.currentUser?.uid;
+  const data = {
     name: payload.name.trim(),
     email: payload.email.trim(),
     phone: payload.phone.trim(),
@@ -49,7 +54,9 @@ export async function saveContactMessage(payload: {
     status: "unread",
     reply: "",
     repliedAt: null,
-  });
+    ...(authenticatedUid ? { uid: authenticatedUid } : {}),
+  };
+  const ref = await addDoc(collection(db, CONTACT_MESSAGES_COLLECTION), data);
 
   return ref.id;
 }
@@ -68,6 +75,7 @@ export async function fetchContactMessages() {
 
     return {
       id: docSnapshot.id,
+      uid: typeof data.uid === "string" ? data.uid : undefined,
       name: String(data.name ?? ""),
       email: String(data.email ?? ""),
       phone: String(data.phone ?? ""),
@@ -79,6 +87,44 @@ export async function fetchContactMessages() {
       updatedAt: data.updatedAt,
     } satisfies ContactMessage;
   });
+}
+
+export async function fetchUserContactMessages(uid: string) {
+  if (!db) {
+    return [] as ContactMessage[];
+  }
+
+  const snapshot = await getDocs(
+    query(collection(db, CONTACT_MESSAGES_COLLECTION), where("uid", "==", uid))
+  );
+
+  return snapshot.docs
+    .map((docSnapshot) => {
+      const data = docSnapshot.data() as DocumentData;
+
+      return {
+        id: docSnapshot.id,
+        uid,
+        name: String(data.name ?? ""),
+        email: String(data.email ?? ""),
+        phone: String(data.phone ?? ""),
+        message: String(data.message ?? ""),
+        status: (data.status === "read" ? "read" : "unread") as ContactMessageStatus,
+        reply: String(data.reply ?? ""),
+        repliedAt: data.repliedAt ?? null,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      } satisfies ContactMessage;
+    })
+    .sort((first, second) => {
+      const firstTime = first.createdAt && typeof first.createdAt === "object" && "toMillis" in first.createdAt
+        ? Number((first.createdAt as { toMillis: () => number }).toMillis())
+        : 0;
+      const secondTime = second.createdAt && typeof second.createdAt === "object" && "toMillis" in second.createdAt
+        ? Number((second.createdAt as { toMillis: () => number }).toMillis())
+        : 0;
+      return secondTime - firstTime;
+    });
 }
 
 export async function markContactMessageAsRead(id: string) {

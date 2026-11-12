@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { SearchDialog } from "@/components/SearchDialog";
+import { HomeHeroCarousel } from "@/components/HomeHeroCarousel";
+import { Pagination } from "@/components/Pagination";
 import { fetchArticles, getArticleImage, type Article } from "@/lib/articles";
 import { useAuth } from "@/lib/auth-context";
-import { db } from "@/lib/firebase";
 
 const normalizeCategory = (value?: string) => (value ?? "").toUpperCase().replace(/\s+/g, " ").trim();
 
@@ -72,6 +72,9 @@ export default function Home() {
   const isAdminVisible = Boolean(user && isAdmin);
   const [publishedArticles, setPublishedArticles] = useState<Article[]>([]);
   const [loadingArticles, setLoadingArticles] = useState(true);
+  const [articlesError, setArticlesError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   useEffect(() => {
     let ignore = false;
@@ -82,6 +85,12 @@ export default function Home() {
         const nextArticles = await fetchArticles("published");
         if (!ignore) {
           setPublishedArticles(nextArticles);
+          setArticlesError("");
+        }
+      } catch (error) {
+        console.error("HOME_ARTICLES_READ_ERROR", error);
+        if (!ignore) {
+          setArticlesError("Impossible de charger les articles publiés. Consultez la console pour le détail technique.");
         }
       } finally {
         if (!ignore) {
@@ -102,7 +111,15 @@ export default function Home() {
     const normalizedEmail = email.trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+    if (!normalizedEmail) {
+      setSubscribeStatus({
+        type: "error",
+        message: "Veuillez saisir votre adresse e-mail.",
+      });
+      return;
+    }
+
+    if (!emailRegex.test(normalizedEmail)) {
       setSubscribeStatus({
         type: "error",
         message: "Veuillez saisir une adresse e-mail valide.",
@@ -110,43 +127,33 @@ export default function Home() {
       return;
     }
 
-    if (!db) {
-      setSubscribeStatus({
-        type: "error",
-        message: "La configuration Firebase est indisponible pour le moment.",
-      });
-      return;
-    }
-
     try {
       setSubscribeStatus({ type: "loading", message: "Enregistrement en cours..." });
 
-      const subscriberRef = doc(db, "subscribers", normalizedEmail);
-
-      await setDoc(subscriberRef, {
-        email: normalizedEmail,
-        createdAt: serverTimestamp(),
-        source: "homepage-newsletter",
+      const response = await fetch("/api/newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
-      setEmail("");
-      setSubscribeStatus({
-        type: "success",
-        message: "Merci ! Vous êtes maintenant abonné à Barro TV International.",
-      });
-    } catch (error) {
-      if ((error as { code?: string }).code === "permission-denied") {
+      const result = (await response.json()) as { message?: string };
+      if (!response.ok) {
         setSubscribeStatus({
           type: "error",
-          message: "Cette adresse est déjà inscrite à notre newsletter.",
+          message: result.message ?? "Une erreur est survenue. Veuillez réessayer.",
         });
         return;
       }
 
-      console.error("Newsletter subscription error:", error);
+      setEmail("");
+      setSubscribeStatus({
+        type: "success",
+        message: "Merci ! Vous êtes maintenant inscrit à la newsletter de Barro TV International.",
+      });
+    } catch {
       setSubscribeStatus({
         type: "error",
-        message: "La création de l'inscription a été refusée par Firebase. Vérifiez votre adresse e-mail et réessayez.",
+        message: "Impossible de contacter le serveur. Veuillez réessayer.",
       });
     }
   };
@@ -171,6 +178,15 @@ export default function Home() {
       return sortedPublishedArticles.filter((article) => normalizeCategory(article.category) === "AFRIQUE");
     return sortedPublishedArticles.slice(0, 1);
   }, [activeTab, sortedPublishedArticles]);
+
+  const paginatedVisibleArticles = visibleArticles.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -223,21 +239,24 @@ export default function Home() {
               🔎 <span className="hidden sm:inline">Rechercher</span>
             </button>
 
-            {isAdminVisible ? (
+            {user ? (
               <Link
-                href="/administrateur"
+                href="/compte"
                 className="hidden rounded-lg bg-[#111b35] px-4 py-2 font-bold text-white sm:block"
               >
-                Administrateur
+                Mon compte
               </Link>
             ) : (
-              <Link
-                href="/connexion"
-                className="hidden rounded-lg bg-[#d62828] px-4 py-2 font-bold text-white sm:block"
-              >
+              <Link href="/connexion" className="hidden rounded-lg bg-[#d62828] px-4 py-2 font-bold text-white sm:block">
                 Se connecter
               </Link>
             )}
+
+            {isAdminVisible ? (
+              <Link href="/administrateur" className="hidden rounded-lg border border-[#111b35] px-4 py-2 font-bold text-[#111b35] sm:block">
+                Administrateur
+              </Link>
+            ) : null}
 
             <button
               type="button"
@@ -272,15 +291,14 @@ export default function Home() {
 
               {user ? (
                 <>
+                  <Link href="/compte" onClick={() => setIsMenuOpen(false)} className="rounded-lg bg-[#111b35] px-3 py-3 font-bold text-white text-center">
+                    Mon compte
+                  </Link>
                   {isAdminVisible ? (
-                    <Link href="/administrateur" onClick={() => setIsMenuOpen(false)} className="rounded-lg bg-[#111b35] px-3 py-3 font-bold text-white text-center">
-                      Mon compte
+                    <Link href="/administrateur" onClick={() => setIsMenuOpen(false)} className="rounded-lg border border-[#111b35] px-3 py-3 font-bold text-[#111b35] text-center">
+                      Administrateur
                     </Link>
-                  ) : (
-                    <Link href="/connexion" onClick={() => setIsMenuOpen(false)} className="rounded-lg bg-[#111b35] px-3 py-3 font-bold text-white text-center">
-                      Mon compte
-                    </Link>
-                  )}
+                  ) : null}
                   <button
                     type="button"
                     onClick={async () => {
@@ -320,6 +338,10 @@ export default function Home() {
       </div>
 
       <section className="mx-auto max-w-7xl px-4 pt-6">
+        <HomeHeroCarousel article={featuredArticle} articleHref={featuredArticleHref} />
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pt-6">
         <Link href={featuredArticleHref} className="block">
           <div className="flex items-center gap-3 rounded-xl bg-[#111b35] px-5 py-4 text-white shadow">
             <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" />
@@ -341,6 +363,10 @@ export default function Home() {
           {loadingArticles ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
               Chargement des articles…
+            </div>
+          ) : articlesError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+              {articlesError}
             </div>
           ) : featuredArticle ? (
             <Link
@@ -451,12 +477,16 @@ export default function Home() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {visibleArticles.length === 0 ? (
+          {articlesError ? (
+            <div className="col-span-full rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+              {articlesError}
+            </div>
+          ) : visibleArticles.length === 0 ? (
             <div className="col-span-full rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
               Aucun article disponible pour cette catégorie.
             </div>
           ) : (
-            visibleArticles.map((article) => (
+            paginatedVisibleArticles.map((article) => (
               <article
                 key={article.id}
                 className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
@@ -487,6 +517,12 @@ export default function Home() {
             ))
           )}
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={visibleArticles.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pb-10">
@@ -497,7 +533,7 @@ export default function Home() {
           <p className="mx-auto mt-3 max-w-xl text-slate-300">
             Recevez les principales informations de Barro TV International.
           </p>
-          <form onSubmit={handleSubscribe} className="mx-auto mt-6 flex max-w-lg flex-col gap-3 sm:flex-row">
+          <form onSubmit={handleSubscribe} noValidate className="mx-auto mt-6 flex max-w-lg flex-col gap-3 sm:flex-row">
             <input
               type="email"
               value={email}

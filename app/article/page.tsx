@@ -36,6 +36,7 @@ const articles: Record<
     date: "24 août 2026 • 17:40",
     author: "Barro TV International",
     content: [
+
       "Retrouvez dans cet article les principales informations politiques du Sénégal.",
       "La rédaction de Barro TV International suivra les développements et présentera les informations importantes au fur et à mesure.",
     ],

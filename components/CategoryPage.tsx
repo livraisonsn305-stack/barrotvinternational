@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { Pagination } from "@/components/Pagination";
 import { fetchArticles, getArticleImage, matchesCategoryKey, type Article } from "@/lib/articles";
 
 export type CategoryPageProps = {
@@ -15,6 +16,8 @@ export default function CategoryPage({ title, categoryKeys, emptyMessage }: Cate
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   useEffect(() => {
     let ignore = false;
@@ -45,6 +48,10 @@ export default function CategoryPage({ title, categoryKeys, emptyMessage }: Cate
     };
   }, [title]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryKeys]);
+
   const requestedCategoryKeys = useMemo(
     () => (Array.isArray(categoryKeys) ? categoryKeys : [categoryKeys]),
     [categoryKeys]
@@ -56,6 +63,11 @@ export default function CategoryPage({ title, categoryKeys, emptyMessage }: Cate
         .filter((article) => matchesCategoryKey(article.category, requestedCategoryKeys))
         .sort((a, b) => Number(b.createdAt?.seconds ?? 0) - Number(a.createdAt?.seconds ?? 0)),
     [articles, requestedCategoryKeys]
+  );
+
+  const paginatedArticles = categoryArticles.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
   return (
@@ -95,7 +107,7 @@ export default function CategoryPage({ title, categoryKeys, emptyMessage }: Cate
           </div>
         ) : (
           <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {categoryArticles.map((article) => (
+            {paginatedArticles.map((article) => (
               <article key={article.id} className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                 <img src={getArticleImage(article.image)} alt={article.title} className="h-48 w-full object-cover" />
                 <div className="p-5">
@@ -115,6 +127,12 @@ export default function CategoryPage({ title, categoryKeys, emptyMessage }: Cate
                 </div>
               </article>
             ))}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={categoryArticles.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </section>

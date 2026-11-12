@@ -3,8 +3,10 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
   query,
   serverTimestamp,
@@ -25,6 +27,8 @@ export type Article = {
   description: string;
   content: string;
   image?: string;
+  videoUrl?: string;
+  keywords?: string[];
   author?: string;
   authorEmail?: string;
   status: ArticleStatus;
@@ -100,6 +104,7 @@ export function filterArticlesByQuery(articles: Article[], query: string) {
       article.content,
       article.slug,
       article.author,
+      ...(article.keywords ?? []),
     ]
       .filter(Boolean)
       .join(" ");
@@ -152,12 +157,106 @@ export function getArticlesCollection() {
   return db ? collection(db, ARTICLES_COLLECTION) : null;
 }
 
+async function fetchPublicArticleData<T>(path: string): Promise<T>;
+async function fetchPublicArticleData<T>(path: string, notFoundAsNull: true): Promise<T | null>;
+async function fetchPublicArticleData<T>(path: string, notFoundAsNull = false): Promise<T | null> {
+  const response = await fetch(path, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  if (notFoundAsNull && response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Public articles request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+function toArticle(id: string, data: DocumentData): Article | null {
+  if (data.status !== "published" || data.published !== true) {
+    return null;
+  }
+
+  return {
+    id,
+    title: typeof data.title === "string" ? data.title : "",
+    slug: typeof data.slug === "string" ? data.slug : "",
+    category: typeof data.category === "string" ? data.category : "",
+    description: typeof data.description === "string" ? data.description : "",
+    content: typeof data.content === "string" ? data.content : "",
+    ...(typeof data.image === "string" ? { image: data.image } : {}),
+    ...(typeof data.videoUrl === "string" ? { videoUrl: data.videoUrl } : {}),
+    ...(Array.isArray(data.keywords)
+      ? { keywords: data.keywords.filter((keyword: unknown): keyword is string => typeof keyword === "string") }
+      : {}),
+    ...(typeof data.author === "string" ? { author: data.author } : {}),
+    ...(typeof data.views === "number" ? { views: data.views } : {}),
+    status: "published",
+    published: true,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
+}
+
+async function fetchPublishedArticlesFromFirestore() {
+  if (!db) {
+    throw new Error("Firebase Firestore is not configured in the browser.");
+  }
+
+  const snapshot = await getDocs(
+    query(
+      collection(db, ARTICLES_COLLECTION),
+      where("status", "==", "published"),
+      where("published", "==", true)
+    )
+  );
+
+  return snapshot.docs
+    .map((document) => toArticle(document.id, document.data()))
+    .filter((article): article is Article => article !== null);
+}
+
+async function fetchPublishedArticleFromFirestore(identifier: string) {
+  if (!db) {
+    throw new Error("Firebase Firestore is not configured in the browser.");
+  }
+
+  const articles = collection(db, ARTICLES_COLLECTION);
+  const directSnapshot = await getDocs(
+    query(
+      articles,
+      where(documentId(), "==", identifier),
+      where("status", "==", "published"),
+      where("published", "==", true),
+      limit(1)
+    )
+  );
+  const directDocument = directSnapshot.docs[0];
+  if (directDocument) {
+    return toArticle(directDocument.id, directDocument.data());
+  }
+
+  const slugSnapshot = await getDocs(
+    query(
+      articles,
+      where("slug", "==", identifier),
+      where("status", "==", "published"),
+      where("published", "==", true),
+      limit(1)
+    )
+  );
+  const document = slugSnapshot.docs[0];
+
+  return document ? toArticle(document.id, document.data()) : null;
+}
+
 export async function saveArticle(article: Partial<Article>, id?: string) {
   if (!db) return null;
 
   const payload = {
     ...article,
-    updatedAt: serverTimestamp(),
+    ...(article.videoUrl !== undefined ? { videoUrl: article.videoUrl } : {}),
+    ...(article.keywords !== undefined ? { keywords: article.keywords } : {}),
     ...(article.status === "published" ? { published: true } : { published: false }),
   };
 
@@ -166,7 +265,7 @@ export async function saveArticle(article: Partial<Article>, id?: string) {
     const snapshot = await getDoc(ref);
 
     if (snapshot.exists()) {
-      await updateDoc(ref, payload);
+      await updateDoc(ref, { ...payload, updatedAt: serverTimestamp() });
       return id;
     }
   }
@@ -216,6 +315,28 @@ export function listenToArticles(
 }
 
 export async function fetchArticles(status: ArticleStatus | "all" = "published") {
+  if (status === "published") {
+    try {
+      const articles = await fetchPublicArticleData<unknown>("/api/articles");
+      if (!Array.isArray(articles)) {
+        throw new Error("Published articles endpoint returned an invalid response.");
+      }
+
+      return articles as Article[];
+    } catch (apiError) {
+      console.warn("PUBLIC_ARTICLES_API_UNAVAILABLE_USING_FIRESTORE", apiError);
+      try {
+        return await fetchPublishedArticlesFromFirestore();
+      } catch (firestoreError) {
+        console.error("ARTICLES_READ_ERROR", firestoreError);
+        throw new AggregateError(
+          [apiError, firestoreError],
+          "Unable to load published articles from the API or Firestore."
+        );
+      }
+    }
+  }
+
   if (!db) {
     const error = new Error("Firebase Firestore is not configured.");
     console.error("ARTICLES_READ_ERROR", error);
@@ -224,11 +345,9 @@ export async function fetchArticles(status: ArticleStatus | "all" = "published")
 
   try {
     const base = collection(db, ARTICLES_COLLECTION);
-    const snapshot = await getDocs(
-      status === "all"
-        ? query(base)
-        : query(base, where("status", "==", status), where("published", "==", true))
-    );
+    const snapshot = await getDocs(status === "all"
+      ? query(base)
+      : query(base, where("status", "==", status), where("published", "==", true)));
 
     return snapshot.docs.map((docSnapshot) => {
       const data = docSnapshot.data();
@@ -246,56 +365,24 @@ export async function fetchArticles(status: ArticleStatus | "all" = "published")
 }
 
 export async function fetchPublishedArticle(identifier: string) {
-  if (!db) {
-    const error = new Error("Firebase Firestore is not configured.");
-    console.error("ARTICLE_READ_ERROR", error);
-    throw error;
-  }
-
   const normalizedIdentifier = identifier.trim();
   if (!normalizedIdentifier) return null;
 
   try {
-    try {
-      const directSnapshot = await getDoc(doc(db, ARTICLES_COLLECTION, normalizedIdentifier));
-      if (directSnapshot.exists()) {
-        const data = directSnapshot.data();
-        if (data.status === "published" && data.published === true) {
-          return {
-            id: directSnapshot.id,
-            ...(data as DocumentData),
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-          } as Article;
-        }
-
-        return null;
-      }
-    } catch (directReadError) {
-      console.warn("ARTICLE_DIRECT_READ_FALLBACK", directReadError);
-    }
-
-    const slugSnapshot = await getDocs(
-      query(
-        collection(db, ARTICLES_COLLECTION),
-        where("slug", "==", normalizedIdentifier),
-        where("status", "==", "published"),
-        where("published", "==", true)
-      )
+    return await fetchPublicArticleData<Article>(
+      `/api/articles/${encodeURIComponent(normalizedIdentifier)}`,
+      true
     );
-
-    const slugDocument = slugSnapshot.docs[0];
-    if (!slugDocument) return null;
-
-    const data = slugDocument.data();
-    return {
-      id: slugDocument.id,
-      ...(data as DocumentData),
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-    } as Article;
-  } catch (error) {
-    console.error("ARTICLE_READ_ERROR", error);
-    throw error;
+  } catch (apiError) {
+    console.warn("PUBLIC_ARTICLE_API_UNAVAILABLE_USING_FIRESTORE", apiError);
+    try {
+      return await fetchPublishedArticleFromFirestore(normalizedIdentifier);
+    } catch (firestoreError) {
+      console.error("ARTICLE_READ_ERROR", firestoreError);
+      throw new AggregateError(
+        [apiError, firestoreError],
+        "Unable to load the article from the API or Firestore."
+      );
+    }
   }
 }

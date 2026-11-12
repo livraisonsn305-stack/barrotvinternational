@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { Pagination } from "@/components/Pagination";
 import { fetchArticles, filterArticlesByQuery, type Article } from "@/lib/articles";
 
 export default function RecherchePage() {
   const [query, setQuery] = useState("");
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     let ignore = false;
@@ -19,6 +23,12 @@ export default function RecherchePage() {
         const nextArticles = await fetchArticles("published");
         if (!ignore) {
           setArticles(nextArticles);
+          setError("");
+        }
+      } catch (loadError) {
+        console.error("SEARCH_ARTICLES_READ_ERROR", loadError);
+        if (!ignore) {
+          setError("Impossible de charger les articles publiés. Consultez la console pour le détail technique.");
         }
       } finally {
         if (!ignore) {
@@ -34,6 +44,14 @@ export default function RecherchePage() {
   }, []);
 
   const results = useMemo(() => filterArticlesByQuery(articles, query), [articles, query]);
+  const paginatedResults = results.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query]);
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -87,12 +105,14 @@ export default function RecherchePage() {
         </div>
 
         <div className="mt-8 space-y-4">
-          {results.length === 0 ? (
+          {error ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700">{error}</div>
+          ) : results.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-600">
               Aucun article trouvé
             </div>
           ) : (
-            results.map((article) => (
+            paginatedResults.map((article) => (
               <Link
                 key={article.slug}
                 href={`/article/${article.slug || article.id}`}
@@ -107,6 +127,12 @@ export default function RecherchePage() {
               </Link>
             ))
           )}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={results.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </section>
     </main>

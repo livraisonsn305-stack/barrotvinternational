@@ -6,7 +6,9 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == 'livraisonsn305@gmail.com';
+      return isSignedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() == 'livraisonsn305@gmail.com';
     }
 
     function isValidNewsletterEmail(email) {
@@ -34,20 +36,27 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.uid == userId
         && request.resource.data.email == request.auth.token.email
-        && request.resource.data.role in ['admin', 'user'];
+        && request.resource.data.role == (isAdmin() ? 'admin' : 'user');
 
       allow update: if isSignedIn()
         && (request.auth.uid == userId || isAdmin())
         && request.resource.data.uid == userId
         && request.resource.data.email == request.auth.token.email
-        && request.resource.data.role in ['admin', 'user'];
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'firstName', 'lastName', 'photoURL', 'updatedAt'
+        ]);
 
       allow delete: if false;
     }
 
     match /articles/{articleId} {
-      allow get: if (resource.data.status == 'published' && !isSignedIn()) || isAdmin();
-      allow list: if !isSignedIn() || isAdmin();
+      allow get: if isAdmin()
+        || (resource.data.status == 'published'
+          && resource.data.published == true);
+      allow list: if isAdmin()
+        || (resource.data.status == 'published'
+          && resource.data.published == true);
 
       allow create, update, delete: if isAdmin();
 
@@ -70,6 +79,42 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isAdmin();
       }
+    }
+
+    match /contact_messages/{messageId} {
+      allow create: if (
+          (
+            request.auth == null
+            && !request.resource.data.keys().hasAny(['uid'])
+          ) || (
+            request.auth != null
+            && request.resource.data.uid == request.auth.uid
+          )
+        )
+        && request.resource.data.keys().hasOnly([
+          'name', 'email', 'phone', 'message', 'createdAt', 'status', 'reply', 'repliedAt', 'uid'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.email is string
+        && request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && request.resource.data.phone is string
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10
+        && request.resource.data.message.size() <= 5000
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.status == 'unread'
+        && request.resource.data.reply == ''
+        && request.resource.data.repliedAt == null;
+
+      allow get, list: if isAdmin()
+        || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /push_subscribers/{subscriberId} {
+      allow read, write: if false;
     }
   }
 }

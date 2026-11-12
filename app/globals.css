@@ -24,3 +24,36 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes logo-news-pulse {
+  0%, 34% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  12% {
+    opacity: 0.84;
+    transform: translateY(-2px) scale(1.035);
+  }
+
+  22% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.logo-news-animation {
+  animation: logo-news-pulse 3s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-news-animation {
+    animation: none;
+  }
+}
