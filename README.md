@@ -20,6 +20,14 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Notifications push
+
+Les notifications push Web utilisent Firebase Cloud Messaging. Ajoutez `NEXT_PUBLIC_FIREBASE_VAPID_KEY` aux variables publiques Firebase existantes. Les variables serveur `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` et `FIREBASE_PRIVATE_KEY` restent nécessaires pour Firebase Admin et ne doivent jamais être préfixées par `NEXT_PUBLIC_`.
+
+Dans Firebase Console, activez Cloud Messaging et générez une paire de clés Web Push dans **Project settings > Cloud Messaging > Web configuration**. Placez uniquement la clé publique VAPID dans `NEXT_PUBLIC_FIREBASE_VAPID_KEY`, puis redémarrez Next.js. L’administration `/administrateur` permet ensuite un envoi manuel vers la collection serveur `push_subscribers`.
+
+Les tests doivent être réalisés en HTTPS (ou sur `localhost`) après activation des notifications dans Chrome, Firefox, Edge ou Safari compatible. Phoenix est testé par les API réellement disponibles : le bouton reste inactif avec un message explicite si Notification API, Push API, Service Worker ou Firebase Messaging ne sont pas supportés.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

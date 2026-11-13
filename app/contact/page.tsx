@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { saveContactMessage } from "@/lib/contact";
+import { fetchUserContactMessages, saveContactMessage, type ContactMessage } from "@/lib/contact";
+import { useAuth } from "@/lib/auth-context";
 
 export default function ContactPage() {
+  const { user, loading: authLoading } = useAuth();
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -15,6 +17,17 @@ export default function ContactPage() {
     phone: "",
     message: "",
   });
+  const [userMessages, setUserMessages] = useState<ContactMessage[]>([]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    void fetchUserContactMessages(user.uid).then(setUserMessages).catch((loadError) => {
+      console.error("CONTACT_MESSAGES_LOAD_ERROR", loadError);
+    });
+  }, [authLoading, user]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -33,10 +46,14 @@ export default function ContactPage() {
         email: form.email,
         phone: form.phone,
         message: form.message,
+        uid: user?.uid,
       });
 
       setForm({ name: "", email: "", phone: "", message: "" });
       setSubmitted(true);
+      if (user) {
+        setUserMessages(await fetchUserContactMessages(user.uid));
+      }
     } catch (submitError) {
       console.error("CONTACT_MESSAGE_SAVE_ERROR", submitError);
       setError("Impossible d'envoyer votre message pour le moment. Veuillez réessayer.");
@@ -166,6 +183,31 @@ export default function ContactPage() {
           )}
         </form>
       </section>
+
+      {!authLoading && user ? (
+        <section className="mx-auto max-w-6xl px-4 pb-12">
+          <h2 className="text-2xl font-black text-[#111b35]">Mes messages</h2>
+          <div className="mt-5 grid gap-4">
+            {userMessages.length === 0 ? (
+              <p className="rounded-2xl bg-slate-100 p-5 text-slate-600">
+                Vous n&apos;avez pas encore envoyé de message.
+              </p>
+            ) : userMessages.map((contactMessage) => (
+              <article key={contactMessage.id} className="rounded-2xl border bg-white p-5 shadow-sm">
+                <p className="font-semibold text-slate-700">Message envoyé :</p>
+                <p className="mt-2 whitespace-pre-wrap text-slate-600">{contactMessage.message}</p>
+                <p className="mt-4 font-semibold text-slate-700">Réponse de Barro TV :</p>
+                <p className="mt-2 whitespace-pre-wrap text-slate-600">
+                  {contactMessage.reply || "Votre message a bien été reçu. Notre équipe vous répondra bientôt."}
+                </p>
+                <p className="mt-4 font-semibold text-slate-700">
+                  Statut : {contactMessage.reply ? "Répondu" : "En attente"}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

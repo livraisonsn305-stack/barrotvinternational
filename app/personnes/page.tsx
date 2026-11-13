@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Actualité Personnes",
+  description: "Les actualités consacrées aux personnes suivies par Barro TV International.",
+  alternates: { canonical: "https://www.barrotvinternational.com/personnes" },
+};
 
 export default function PersonnesPage() {
   return (

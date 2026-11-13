@@ -12,6 +12,10 @@ type ArticleMetadata = {
   description?: string;
   content?: string;
   image?: string;
+  author?: string;
+  category?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
   status?: string;
   published?: boolean;
 };
@@ -81,6 +85,20 @@ function getImageType(imageUrl: string) {
   return extension ? types[extension] : undefined;
 }
 
+function toIsoDate(value: unknown) {
+  if (!value) return undefined;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    const timestamp = value as { toDate?: () => Date };
+    if (typeof timestamp.toDate === "function") return timestamp.toDate().toISOString();
+  }
+  if (typeof value === "object" && value !== null && "seconds" in value) {
+    const seconds = Number((value as { seconds?: number }).seconds);
+    if (Number.isFinite(seconds)) return new Date(seconds * 1000).toISOString();
+  }
+  return undefined;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -104,6 +122,8 @@ export async function generateMetadata({
   const image = getPublicImage(article.image);
   const url = `${SITE_URL}/article/${encodeURIComponent(article.slug || article.id)}`;
   const imageType = getImageType(image);
+  const datePublished = toIsoDate(article.createdAt);
+  const dateModified = toIsoDate(article.updatedAt) || datePublished;
   const imageMetadata = {
     url: image,
     secureUrl: image,
@@ -122,6 +142,9 @@ export async function generateMetadata({
       url,
       title,
       description,
+      ...(datePublished ? { publishedTime: datePublished } : {}),
+      ...(dateModified ? { modifiedTime: dateModified } : {}),
+      ...(article.author?.trim() ? { authors: [article.author.trim()] } : {}),
       images: [imageMetadata],
       siteName: "Barro TV International",
       locale: "fr_FR",
