@@ -214,7 +214,7 @@ function classifyNewsCategory(title: string, description: string) {
     return "TECHNOLOGIE";
   }
 
-  if (/(international|monde|onu|union europeenne|organisation|etats-unis|france|afrique)|/i.test(haystack)) {
+  if (/(international|monde|onu|union europeenne|organisation|etats-unis|france|afrique)/i.test(haystack)) {
     return "INTERNATIONAL";
   }
 
@@ -428,12 +428,18 @@ export function getConfiguredAiProvider() {
   return { provider: "none" as const };
 }
 
-export async function generateArticleFromSource(candidate: NewsCandidate) {
+type ArticleGenerationResult = {
+  article: ReturnType<typeof createFallbackArticle>;
+  generationSucceeded: boolean;
+  requiresEditorialReview: boolean;
+};
+
+async function generateArticleWithStatus(candidate: NewsCandidate): Promise<ArticleGenerationResult> {
   const fallback = createFallbackArticle(candidate);
   const provider = getConfiguredAiProvider();
 
   if (provider.provider === "none") {
-    return fallback;
+    return { article: fallback, generationSucceeded: false, requiresEditorialReview: true };
   }
 
   try {
@@ -481,7 +487,7 @@ export async function generateArticleFromSource(candidate: NewsCandidate) {
         ? parsed.references.filter((ref) => ref?.url).map((ref) => ({ label: ref.label ?? candidate.sourceName, url: ref.url ?? candidate.canonicalUrl }))
         : fallback.references;
 
-      return {
+      const article = {
         ...fallback,
         title: finalTitle || fallback.title,
         category: finalCategory,
@@ -489,6 +495,11 @@ export async function generateArticleFromSource(candidate: NewsCandidate) {
         keywords: finalKeywords.length > 0 ? finalKeywords : fallback.keywords,
         content: finalContent || fallback.content,
         references: finalReferences,
+      };
+      return {
+        article,
+        generationSucceeded: true,
+        requiresEditorialReview: article.content === fallback.content,
       };
     }
 
@@ -522,7 +533,7 @@ export async function generateArticleFromSource(candidate: NewsCandidate) {
         references?: Array<{ label?: string; url?: string }>;
       }) : {};
 
-      return {
+      const article = {
         ...fallback,
         title: (parsed.title ?? fallback.title).trim() || fallback.title,
         category: normalizeCategoryLabel(parsed.category ?? fallback.category),
@@ -533,12 +544,22 @@ export async function generateArticleFromSource(candidate: NewsCandidate) {
           ? parsed.references.filter((ref) => ref?.url).map((ref) => ({ label: ref.label ?? candidate.sourceName, url: ref.url ?? candidate.canonicalUrl }))
           : fallback.references,
       };
+      return {
+        article,
+        generationSucceeded: true,
+        requiresEditorialReview: article.content === fallback.content,
+      };
     }
   } catch (error) {
     console.warn("AI_ARTICLE_GENERATION_FALLBACK", error);
   }
 
-  return fallback;
+  return { article: fallback, generationSucceeded: false, requiresEditorialReview: true };
+}
+
+export async function generateArticleFromSource(candidate: NewsCandidate) {
+  const result = await generateArticleWithStatus(candidate);
+  return result.article;
 }
 
 export function isCronRequestAuthorized(request: Request, secret: string | undefined) {
@@ -685,7 +706,7 @@ export async function runNewsAutomation(): Promise<NewsAutomationResult> {
             continue;
           }
 
-          const article = await generateArticleFromSource(item);
+          const { article, generationSucceeded, requiresEditorialReview } = await generateArticleWithStatus(item);
           const validationReasons = validateNewsCandidate({
             title: article.title,
             description: article.description,
@@ -693,6 +714,16 @@ export async function runNewsAutomation(): Promise<NewsAutomationResult> {
             category: article.category,
             canonicalUrl: article.canonicalUrl,
           });
+
+          if (!verifyAllowedSource(source, article.canonicalUrl)) {
+            validationReasons.push("source non autorisée");
+          }
+          if (!generationSucceeded) {
+            validationReasons.push("génération IA absente ou en échec");
+          }
+          if (requiresEditorialReview) {
+            validationReasons.push("vérification éditoriale requise pour le contenu de secours");
+          }
 
           const sensitiveTerms = /(deces|décès|accusation|enquete|enquête|election|élection|affaire judiciaire|arrestation|condamnation)/i;
           if (sensitiveTerms.test(article.title) && article.content.length < 300) {
@@ -714,8 +745,8 @@ export async function runNewsAutomation(): Promise<NewsAutomationResult> {
               content: article.content,
               image: article.image,
               author: article.author,
-              status: "draft",
-              published: false,
+              status: "published",
+              published: true,
               keywords: article.keywords,
               createdAt: FieldValue.serverTimestamp(),
               updatedAt: FieldValue.serverTimestamp(),
@@ -730,7 +761,7 @@ export async function runNewsAutomation(): Promise<NewsAutomationResult> {
             { merge: true }
           );
 
-          result.pending += 1;
+          result.published += 1;
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unexpected source error";
